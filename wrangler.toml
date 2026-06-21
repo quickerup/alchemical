@@ -1,12 +1,19 @@
-name = "alchemical"
+name = "jutsumoji"
 main = "src/worker.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-02-04"
 
+[observability]
+enabled = true
 
 [[d1_databases]]
 binding = "DB"
 database_name = "jutsumoji"
 database_id = "51604989-07b2-43bd-8bb6-68680d9622dc"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "bcdd232eae7543cb910b5e4523c88731"
+preview_id = "<ID_OF_PREVIEW_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
 
 [[kv_namespaces]]
 binding = "BOT_SESSIONS"
