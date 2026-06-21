@@ -1,112 +1,555 @@
+const FINISHER = "🙏🏻";
+
+
 const GESTURES = {
-  '💪🏻':['Flex',6,2,2],'👏🏻':['Clap',3,4,3],'👍🏻':['Up',4,4,2],'👎🏻':['Down',4,3,3],
-  '🫶🏻':['Heart',2,5,6],'🙌🏻':['Raise',4,4,5],'👐🏻':['Open',3,6,1],'🤲🏻':['Cup',1,6,3],
-  '🤜🏻':['RHook',9,1,0],'🤛🏻':['LHook',9,1,0],'✊🏻':['Fist',8,2,0],'👊🏻':['Strike',8,2,0],
-  '🫳🏻':['PDown',2,7,1],'🫴🏻':['PUp',2,7,1],'🫱🏻':['HRight',3,5,2],'🫲🏻':['HLeft',3,5,2],
-  '🫸🏻':['ThrustR',7,3,0],'🫷🏻':['ThrustL',7,3,0],'👋🏻':['Wave',3,5,2],'🤚🏻':['Raise',1,8,1],
-  '🖐🏻':['Palm',2,8,0],'✋🏻':['Stop',1,9,0],'🖖🏻':['Vulcan',3,3,9],'🤟🏻':['Love',2,4,8],
-  '🤘🏻':['Horns',5,1,4],'✌🏻':['Peace',3,4,7],'🤞🏻':['Cross',4,3,7],'🫰🏻':['Snap',5,2,7],
-  '🤙🏻':['Shaka',3,4,6],'🤌🏻':['Kiss',4,4,6],'🤏🏻':['Pinch',3,5,2],'👌🏻':['OK',4,3,5],
-  '🫵🏻':['You',5,2,5],'👉🏻':['PRight',5,2,3],'👈🏻':['PLeft',5,2,3],'☝🏻':['OneUp',4,3,3],
-  '👆🏻':['PUp2',4,3,3],'👇🏻':['PDown2',4,3,3],'🖕🏻':['Defiance',6,0,4],'✍🏻':['Write',3,3,6],
-  '🤳🏻':['Selfie',2,2,7]
+
+"💪🏻":{name:"Flex",atk:6,def:2,spe:2,type:"kinetic"},
+"👏🏻":{name:"Clap",atk:3,def:4,spe:3,type:"barrier"},
+"👍🏻":{name:"Up",atk:4,def:4,spe:2,type:"barrier"},
+"👎🏻":{name:"Down",atk:4,def:3,spe:3,type:"kinetic"},
+
+"🫶🏻":{name:"Heart",atk:2,def:5,spe:6,type:"mystic"},
+"🙌🏻":{name:"Raise",atk:4,def:4,spe:5,type:"mystic"},
+"👐🏻":{name:"Open",atk:3,def:6,spe:1,type:"barrier"},
+"🤲🏻":{name:"Cup",atk:1,def:6,spe:3,type:"barrier"},
+
+
+"🤜🏻":{name:"Right Hook",atk:9,def:1,spe:0,type:"kinetic"},
+"🤛🏻":{name:"Left Hook",atk:9,def:1,spe:0,type:"kinetic"},
+"✊🏻":{name:"Fist",atk:8,def:2,spe:0,type:"kinetic"},
+"👊🏻":{name:"Strike",atk:8,def:2,spe:0,type:"kinetic"},
+
+
+"🫸🏻":{name:"Thrust",atk:7,def:3,spe:0,type:"kinetic"},
+"🫷🏻":{name:"Reverse Thrust",atk:7,def:3,spe:0,type:"kinetic"},
+
+
+"🤚🏻":{name:"Guard",atk:1,def:8,spe:1,type:"barrier"},
+"🖐🏻":{name:"Palm",atk:2,def:8,spe:0,type:"barrier"},
+"✋🏻":{name:"Stop",atk:1,def:9,spe:0,type:"barrier"},
+
+
+"🖖🏻":{name:"Vulcan",atk:3,def:3,spe:9,type:"mystic"},
+"🤟🏻":{name:"Love",atk:2,def:4,spe:8,type:"mystic"},
+"🤞🏻":{name:"Cross",atk:4,def:3,spe:7,type:"mystic"},
+"✌🏻":{name:"Peace",atk:3,def:4,spe:7,type:"mystic"},
+"🤌🏻":{name:"Kiss",atk:4,def:4,spe:6,type:"mystic"}
+
 };
 
-const FINISHER = '🙏🏻';
 
-function getOutcome(atk, defn, spe) {
-  if (atk >= 20 && spe >= 15) return '🔥💥⚡🌪️🤜🏻';
-  if (atk >= 20)              return '💥🤜🏻🤛🏻✊🏻👊🏻';
-  if (defn >= 20 && spe >= 15) return '🛡️🌀🔮✨🤲🏻';
-  if (defn >= 20)              return '🛡️🤚🏻✋🏻🖐🏻👐🏻';
-  if (spe >= 25)               return '🌀🔮⭐🌙✨🎇🤟🏻';
-  if (spe >= 20)               return '✨🔮🌀🖖🏻🤌🏻';
-  if (atk >= 15 && defn >= 15) return '⚖️🤜🏻✋🏻💫🛡️';
-  if (atk >= 15)               return '⚡🤜🏻👊🏻🔥';
-  if (defn >= 15)              return '🛡️✋🏻🤲🏻💠';
-  if (spe >= 15)               return '🌀✨🤞🏻🌙';
-  return '👋🏻💨🌫️';
+
+const FINISHERS={
+
+"👊🏻":{
+name:"Execution Blow",
+atk:15
+},
+
+"✋🏻":{
+name:"Absolute Barrier",
+def:15
+},
+
+"🖖🏻":{
+name:"Astral Seal",
+spe:15
 }
 
-function parseEmojis(input) {
-  const parsed = [];
-  let remaining = input;
-  while (remaining.length > 0) {
-    let matched = false;
-    for (const gesture of Object.keys(GESTURES)) {
-      if (remaining.startsWith(gesture)) {
-        parsed.push(gesture);
-        remaining = remaining.slice(gesture.length);
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      // skip one character (handles multi-byte safely)
-      remaining = [...remaining].slice(1).join('');
-    }
-  }
-  return parsed;
+};
+
+
+
+const CODEX={
+
+
+help:{
+
+title:"Emoji Jutsu Commands",
+
+commands:[
+
+"/lookup?combo=👊🏻🖖🏻🙏🏻",
+"Cast a technique",
+
+"/analyze?combo=👊🏻🖖🏻🙏🏻",
+"Explain a technique",
+
+"/gestures",
+"View hand signs",
+
+"/rules",
+"Learn combat",
+
+"/train",
+"Begin training"
+
+]
+
+},
+
+
+
+rules:{
+
+title:"The Jutsu System",
+
+text:
+
+`
+Emoji Jutsu is a deterministic combat language.
+
+Create a sequence of hand signs.
+
+Every technique MUST end with 🙏🏻.
+
+The finisher seals the technique.
+
+Three forces exist:
+
+🔥 Kinetic
+Power and aggression.
+
+🛡 Barrier
+Defense and control.
+
+🔮 Mystic
+Energy and complexity.
+
+
+Kinetic > Mystic
+
+Mystic > Barrier
+
+Barrier > Kinetic
+`
+
+},
+
+
+train:{
+
+message:
+
+`
+TRAINING MODE
+
+Step 1:
+Choose 1-5 hand signs.
+
+Step 2:
+Mix power, defense and energy.
+
+Step 3:
+Seal your technique with 🙏🏻.
+
+Step 4:
+Discover your spell.
+
+Example:
+
+👊🏻🖖🏻🤞🏻🙏🏻
+`
+
 }
+
+};
+
+
+
+
+
+function parseEmojis(input){
+
+let result=[];
+let remaining=input;
+
+
+while(remaining.length){
+
+let found=false;
+
+
+for(const e of Object.keys(GESTURES)){
+
+if(remaining.startsWith(e)){
+
+result.push(e);
+remaining=remaining.slice(e.length);
+found=true;
+break;
+
+}
+
+}
+
+
+if(!found)
+return null;
+
+}
+
+
+return result;
+
+}
+
+
+
+
+
+function scale(x){
+
+return Math.floor(
+x + Math.sqrt(x)*3
+);
+
+}
+
+
+
+
+
+
+function buildSpell(combo){
+
+
+let atk=0;
+let def=0;
+let spe=0;
+
+
+let types=[];
+
+
+combo.forEach(e=>{
+
+let g=GESTURES[e];
+
+atk+=g.atk;
+def+=g.def;
+spe+=g.spe;
+
+types.push(g.type);
+
+});
+
+
+
+// synergy
+
+for(let i=0;i<combo.length-1;i++){
+
+let a=GESTURES[combo[i]];
+let b=GESTURES[combo[i+1]];
+
+
+if(a.type===b.type){
+
+if(a.type==="kinetic")
+atk+=3;
+
+if(a.type==="barrier")
+def+=3;
+
+if(a.type==="mystic")
+spe+=3;
+
+}
+
+}
+
+
+
+atk=scale(atk);
+def=scale(def);
+spe=scale(spe);
+
+
+
+let className;
+
+
+if(atk>=def && atk>=spe)
+className="Kinetic";
+
+
+else if(def>=atk && def>=spe)
+className="Barrier";
+
+
+else
+className="Mystic";
+
+
+
+
+
+return {
+
+atk,
+def,
+spe,
+
+class:className,
+
+types:[...new Set(types)]
+
+};
+
+}
+
+
+
+
+
+function rank(spell){
+
+let total=
+spell.atk+
+spell.def+
+spell.spe;
+
+
+if(total>100)
+return "S";
+
+
+if(total>75)
+return "A";
+
+
+if(total>50)
+return "B";
+
+
+return "C";
+
+}
+
+
+
+
+
+function analyze(combo){
+
+
+return combo.map(e=>{
+
+let g=GESTURES[e];
+
+
+return `${e} ${g.name}: +${g.atk} ATK +${g.def} DEF +${g.spe} SPE`;
+
+});
+
+}
+
+
+
+
+
+function json(data,status=200){
+
+return new Response(
+
+JSON.stringify(data,null,2),
+
+{
+status,
+headers:{
+"Access-Control-Allow-Origin":"*",
+"Content-Type":"application/json"
+}
+}
+
+);
+
+}
+
+
+
+
 
 export default {
-  async fetch(request) {
-    const url = new URL(request.url);
 
-    // CORS headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': '*',
-      'Content-Type': 'application/json',
-    };
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
-    }
+async fetch(request){
 
-    if (url.pathname !== '/lookup') {
-      return new Response(JSON.stringify({ error: 'Not found' }), {
-        status: 404, headers: corsHeaders
-      });
-    }
 
-    const combo = url.searchParams.get('combo');
-    if (!combo) {
-      return new Response(JSON.stringify({ error: 'Missing combo parameter' }), {
-        status: 400, headers: corsHeaders
-      });
-    }
+const url=new URL(request.url);
 
-    const decoded = decodeURIComponent(combo).trim();
 
-    if (!decoded.endsWith(FINISHER)) {
-      return new Response(JSON.stringify({ error: 'Sequence must end with the 🙏🏻 finisher.' }), {
-        status: 400, headers: corsHeaders
-      });
-    }
+const path=url.pathname;
 
-    const core = decoded.slice(0, decoded.length - FINISHER.length);
-    const comboList = parseEmojis(core);
 
-    if (comboList.length === 0) {
-      return new Response(JSON.stringify({ error: 'No valid gestures found in sequence.' }), {
-        status: 400, headers: corsHeaders
-      });
-    }
 
-    const stats = comboList.map(e => GESTURES[e]);
-    const rawAtk  = stats.reduce((s, x) => s + x[1], 0);
-    const rawDefn = stats.reduce((s, x) => s + x[2], 0);
-    const rawSpe  = stats.reduce((s, x) => s + x[3], 0);
+if(path==="/help")
+return json(CODEX.help);
 
-    const atk  = (rawAtk  >= rawDefn && rawAtk  >= rawSpe)  ? Math.floor(rawAtk  * 1.5) : rawAtk;
-    const defn = (rawDefn >  rawAtk  && rawDefn >= rawSpe)  ? Math.floor(rawDefn * 1.5) : rawDefn;
-    const spe  = (rawSpe  >  rawAtk  && rawSpe  >  rawDefn) ? Math.floor(rawSpe  * 1.5) : rawSpe;
 
-    return new Response(JSON.stringify({
-      status: 'success',
-      data: { combo: decoded, atk, def: defn, spe, outcome: getOutcome(atk, defn, spe) }
-    }), { headers: corsHeaders });
-  }
+
+if(path==="/rules")
+return json(CODEX.rules);
+
+
+
+if(path==="/train")
+return json(CODEX.train);
+
+
+
+if(path==="/gestures")
+
+return json({
+
+count:Object.keys(GESTURES).length,
+
+gestures:GESTURES
+
+});
+
+
+
+
+
+if(
+path!=="/lookup" &&
+path!=="/analyze"
+)
+
+return json({
+error:"Unknown command"
+},404);
+
+
+
+
+
+let input=url.searchParams.get("combo");
+
+
+if(!input)
+return json({
+error:"Missing combo"
+},400);
+
+
+
+
+let decoded=decodeURIComponent(input);
+
+
+
+if(!decoded.endsWith(FINISHER))
+
+return json({
+
+error:"Every technique must end with 🙏🏻"
+
+},400);
+
+
+
+
+let core=
+decoded.slice(
+0,
+decoded.length-FINISHER.length
+);
+
+
+
+let combo=parseEmojis(core);
+
+
+
+if(!combo)
+
+return json({
+
+error:"Unknown gesture detected"
+
+},400);
+
+
+
+
+
+
+let spell=buildSpell(combo);
+
+
+
+
+
+let last=combo[combo.length-1];
+
+
+if(FINISHERS[last]){
+
+spell={
+...spell,
+...FINISHERS[last]
+};
+
+}
+
+
+
+
+
+if(path==="/analyze")
+
+return json({
+
+technique:decoded,
+
+breakdown:analyze(combo),
+
+class:spell.class,
+
+rank:rank(spell),
+
+stats:spell
+
+});
+
+
+
+
+
+
+return json({
+
+status:"success",
+
+technique:decoded,
+
+spell:
+
+`${spell.class} Technique`,
+
+rank:rank(spell),
+
+stats:spell,
+
+
+battleStyle:
+
+spell.class==="Kinetic"?
+"Fast destructive assault":
+
+spell.class==="Barrier"?
+"Counter defensive style":
+
+"High energy mystical casting"
+
+
+});
+
+
+}
+
+
 };
