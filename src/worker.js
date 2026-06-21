@@ -1189,6 +1189,51 @@ return `${e} ${g.name}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
 
 
 
+
+function adminPage(){
+
+return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Emoji Jutsu Admin Console</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#121a33;--panel2:#182345;--text:#eef3ff;--muted:#9fb0d8;--accent:#8b5cf6;--good:#34d399;--bad:#fb7185;--line:#2a3763}*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(circle at top left,#263169 0,#0b1020 42rem);color:var(--text)}header{padding:3rem 1.25rem 2rem;max-width:1180px;margin:auto}h1{font-size:clamp(2rem,5vw,4.5rem);line-height:.95;margin:0 0 1rem}p{color:var(--muted);line-height:1.6}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem;max-width:1180px;margin:0 auto 3rem;padding:0 1.25rem}.card{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));border:1px solid var(--line);border-radius:24px;padding:1.25rem;box-shadow:0 20px 60px rgba(0,0,0,.25)}.wide{grid-column:1/-1}h2{margin:.1rem 0 1rem;font-size:1.25rem}label{display:block;margin:.8rem 0 .35rem;color:#d8e1ff;font-weight:700;font-size:.9rem}input,textarea,select{width:100%;border:1px solid var(--line);border-radius:14px;background:#0a0f20;color:var(--text);padding:.8rem;font:inherit}textarea{min-height:7rem;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}.actions{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1rem}button,a.button{border:0;border-radius:999px;padding:.8rem 1rem;background:var(--accent);color:white;font-weight:800;cursor:pointer;text-decoration:none}button.secondary{background:var(--panel2)}button.good{background:#059669}.pill{display:inline-flex;gap:.4rem;align-items:center;border:1px solid var(--line);border-radius:999px;padding:.35rem .65rem;color:var(--muted);margin:.2rem}.result{white-space:pre-wrap;background:#060914;border:1px solid var(--line);border-radius:18px;padding:1rem;min-height:8rem;overflow:auto;color:#d8e1ff}.status{font-weight:800}.ok{color:var(--good)}.err{color:var(--bad)}.small{font-size:.86rem}.kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#050814;border:1px solid var(--line);padding:.15rem .35rem;border-radius:.45rem}@media(max-width:680px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<span class="pill">🥷 Admin Console</span><span class="pill">🤖 Telegram setup</span><span class="pill">⚔️ Arena controls</span>
+<h1>Emoji Jutsu operations hub</h1>
+<p>Configure the Telegram bot webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. Secrets are only sent from your browser to Telegram or this Worker; they are not stored by this page.</p>
+</header>
+<main class="grid">
+<section class="card wide"><h2>Connection</h2><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="setWebhook()">Set Telegram webhook</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
+<section class="card"><h2>Player actions</h2><label>Username</label><input id="username" value="admin-player"><button onclick="createPlayer()">Create player</button><label>Player ID</label><input id="playerId" placeholder="UUID"><div class="actions"><button class="secondary" onclick="getPlayer()">Load player</button><button class="secondary" onclick="getStats()">Stats</button></div></section>
+<section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🏻🖖🏻🙏🏻"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
+<section class="card"><h2>Arena controls</h2><label>Queue player ID</label><input id="queuePlayer" placeholder="player id or anonymous"><label><input id="includeButler" type="checkbox" style="width:auto" checked> Include AI Butler</label><div class="actions"><button onclick="queueCombo()">Queue combo</button><button class="secondary" onclick="loadArena()">Refresh arena</button><button class="secondary" onclick="loadButler()">AI Butler</button></div></section>
+<section class="card"><h2>Duel simulator</h2><label>Opponent combo</label><input id="opponent" value="✋🏻🤟🏻🙏🏻"><div class="row"><div><label>Player A ID (optional)</label><input id="playerA"></div><div><label>Player B ID (optional)</label><input id="playerB"></div></div><button onclick="simulate()">Run duel</button></section>
+<section class="card wide"><h2>System shortcuts</h2><div class="actions"><button class="secondary" onclick="api('/gestures')">Gestures</button><button class="secondary" onclick="api('/rules')">Rules</button><button class="secondary" onclick="api('/train')">Training</button><button class="secondary" onclick="api('/queue')">Queue</button></div></section>
+<section class="card wide"><h2>Result <span id="status" class="status"></span></h2><pre id="result" class="result">Ready.</pre></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);function base(){return ($('baseUrl').value||location.origin).replace(/\/$/,'')}function webhookUrl(){return base()+'/telegram/webhook'}function updateWebhookUrl(){$('webhookUrl').textContent=webhookUrl()}$('baseUrl').value=location.origin;updateWebhookUrl();$('baseUrl').addEventListener('input',updateWebhookUrl);
+function show(data,ok=true){$('status').textContent=ok?'OK':'ERROR';$('status').className='status '+(ok?'ok':'err');$('result').textContent=typeof data==='string'?data:JSON.stringify(data,null,2)}
+async function api(path,init={}){try{const r=await fetch(base()+path,{headers:{'Content-Type':'application/json',...(init.headers||{})},...init});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}show(d,r.ok);return d}catch(e){show(e.message,false)}}
+async function telegramMethod(method,payload={}){const token=$('botToken').value.trim();if(!token)return show('Enter a Telegram bot token first.',false);const r=await fetch('https://api.telegram.org/bot'+token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show(await r.json(),r.ok)}
+function setWebhook(){return telegramMethod('setWebhook',{url:webhookUrl(),secret_token:$('webhookSecret').value.trim(),allowed_updates:['message','callback_query']})}
+function createPlayer(){return api('/player/create',{method:'POST',body:JSON.stringify({username:$('username').value})})}function getPlayer(){return api('/player?id='+encodeURIComponent($('playerId').value))}function getStats(){return api('/stats?id='+encodeURIComponent($('playerId').value))}
+function lookup(){return api('/lookup?combo='+encodeURIComponent($('combo').value))}function analyze(){return api('/analyze?combo='+encodeURIComponent($('combo').value))}function saveJutsu(){return api('/jutsu/save',{method:'POST',body:JSON.stringify({playerId:$('playerId').value,name:$('jutsuName').value,combo:$('combo').value})})}
+function queueCombo(){return api('/queue',{method:'POST',body:JSON.stringify({playerId:$('queuePlayer').value||$('playerId').value||'anonymous',combo:$('combo').value,includeButler:$('includeButler').checked})})}function loadArena(){return api('/arena')}function loadButler(){return api('/butler')}
+function simulate(){const q=new URLSearchParams({combo:$('combo').value,opponent:$('opponent').value});if($('playerA').value)q.set('playerA',$('playerA').value);if($('playerB').value)q.set('playerB',$('playerB').value);return api('/simulate?'+q)}
+</script>
+</body>
+</html>`;
+
+}
+
+
 function requestBaseUrl(requestUrl){
 
 const url=new URL(requestUrl);
@@ -1266,6 +1311,9 @@ const url=new URL(request.url);
 
 
 const path=url.pathname;
+
+if(path==="/" || path==="/admin")
+return new Response(adminPage(),{headers:{"Content-Type":"text/html; charset=utf-8"}});
 
 
 
