@@ -129,7 +129,8 @@ commands:[
 {method:"POST",path:"/player/create",description:"Create a persistent D1 player profile.",curl:"curl -X POST \"$BASE_URL/player/create\" -H \"Content-Type: application/json\" -d '{\"name\":\"shinobi\"}'"},
 {method:"GET",path:"/player?id=PLAYER-ID",description:"Load a player profile.",curl:"curl \"$BASE_URL/player?id=PLAYER-ID\""},
 {method:"POST",path:"/jutsu/save",description:"Save a player's signature jutsu.",curl:"curl -X POST \"$BASE_URL/jutsu/save\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"PLAYER-ID\",\"name\":\"Astral Jab\",\"combo\":\"👊🏻🖖🏻🙏🏻\"}'"},
-{method:"GET",path:"/stats?id=PLAYER-ID",description:"View player progression, battle history and signature jutsu.",curl:"curl \"$BASE_URL/stats?id=PLAYER-ID\""}
+{method:"GET",path:"/stats?id=PLAYER-ID",description:"View player progression, battle history and signature jutsu.",curl:"curl \"$BASE_URL/stats?id=PLAYER-ID\""},
+{method:"POST",path:"/telegram",description:"Telegram webhook endpoint. Users interact by inline buttons and emoji combos, not slash commands.",curl:"curl -X POST \"$BASE_URL/telegram\" -H \"Content-Type: application/json\" -d '{\"message\":{\"chat\":{\"id\":123},\"text\":\"👊🏻🖖🏻🙏🏻\"}}'"}
 ]
 
 },
@@ -209,6 +210,211 @@ Example:
 
 
 
+
+
+
+
+const TELEGRAM_BUTTONS = {
+main:{
+reply_markup:{
+inline_keyboard:[
+[{text:"📖 Help",callback_data:"help"},{text:"🎓 Train",callback_data:"train"}],
+[{text:"🧿 Gestures",callback_data:"gestures"},{text:"🤖 AI Butler",callback_data:"butler"}],
+[{text:"🏟 Arena",callback_data:"arena"},{text:"⚔️ Sample Duel",callback_data:"sample_duel"}]
+]
+}
+},
+combo:{
+reply_markup:{
+inline_keyboard:[
+[{text:"🔍 Analyze",callback_data:"analyze_last"},{text:"🏟 Queue + Butler",callback_data:"queue_last_butler"}],
+[{text:"⚔️ Duel Sample",callback_data:"duel_last_sample"},{text:"🏠 Menu",callback_data:"menu"}]
+]
+}
+}
+};
+
+function telegramApiUrl(env,method){
+const token=env?.TELEGRAM_BOT_TOKEN || env?.BOT_TOKEN;
+if(!token)
+return null;
+
+return `https://api.telegram.org/bot${token}/${method}`;
+}
+
+async function telegramRequest(env,method,payload){
+const apiUrl=telegramApiUrl(env,method);
+if(!apiUrl)
+return {ok:false,error:"Telegram bot token is not configured"};
+
+const response=await fetch(apiUrl,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify(payload)
+});
+
+let data={};
+try{
+data=await response.json();
+}catch{
+data={ok:response.ok};
+}
+
+return response.ok ? data : {ok:false,status:response.status,description:data.description || "Telegram API request failed"};
+}
+
+function telegramMessage(chatId,text,extra={}){
+return {
+chat_id:chatId,
+text,
+parse_mode:"HTML",
+disable_web_page_preview:true,
+...extra
+};
+}
+
+function telegramSafe(value){
+return String(value ?? "")
+.replace(/&/g,"&amp;")
+.replace(/</g,"&lt;")
+.replace(/>/g,"&gt;");
+}
+
+function formatTechniqueResult(result){
+return [
+`🧪 <b>${telegramSafe(result.name)}</b>`,
+`Technique: ${telegramSafe(result.technique)}`,
+`Rank: <b>${telegramSafe(result.rank)}</b> • Class: <b>${telegramSafe(result.stats.class)}</b>`,
+`ATK ${result.stats.atk} • DEF ${result.stats.def} • SPC ${result.stats.spc}`,
+`Power ${result.stats.power} • Cost ${result.stats.cost} • Risk ${result.stats.risk}`,
+result.stats.finisher ? `Finisher: ${telegramSafe(result.stats.finisher)}` : null
+].filter(Boolean).join("\n");
+}
+
+function formatTelegramHelp(){
+return [
+"🧙 <b>Emoji Jutsu Bot</b>",
+"No slash commands needed — use the inline buttons below or send a sealed emoji combo.",
+"",
+"Build 1-5 hand signs, then seal with 🙏🏻.",
+"Example: 👊🏻🖖🏻🙏🏻"
+].join("\n");
+}
+
+async function answerCallback(env,callbackQuery,text){
+if(!callbackQuery?.id)
+return;
+
+await telegramRequest(env,"answerCallbackQuery",{
+callback_query_id:callbackQuery.id,
+text:text || "Done"
+});
+}
+
+function latestUserCombo(text){
+if(!text)
+return null;
+
+const matches=text.match(/[^\s]+🙏🏻/gu);
+return matches ? matches[matches.length-1] : null;
+}
+
+async function telegramTextForCallback(data,env){
+if(data==="help" || data==="menu")
+return {text:formatTelegramHelp(),keyboard:TELEGRAM_BUTTONS.main.reply_markup};
+
+if(data==="train")
+return {text:`🎓 <b>Training Mode</b>\n${telegramSafe(CODEX.train.message.trim())}`,keyboard:TELEGRAM_BUTTONS.main.reply_markup};
+
+if(data==="gestures"){
+const preview=Object.entries(GESTURES).slice(0,30).map(([emoji,g])=>`${emoji} ${g.name}: ATK ${g.atk} DEF ${g.def} SPC ${g.spc}`).join("\n");
+return {text:`🧿 <b>Hand Signs</b> (${Object.keys(GESTURES).length})\n${telegramSafe(preview)}\n\nSend any 1-5 signs plus 🙏🏻 to cast.`,keyboard:TELEGRAM_BUTTONS.main.reply_markup};
+}
+
+if(data==="butler")
+return {text:`🤖 <b>AI Butler</b>\nNext combo: ${telegramSafe(aiComboForButler((await loadArena(env)).aiButler))}\nQueue with your combo to battle it.`,keyboard:TELEGRAM_BUTTONS.main.reply_markup};
+
+if(data==="arena"){
+const arena=await loadArena(env);
+return {text:`🏟 <b>Arena</b>\nQueue: ${arena.queue.length}\nBattles: ${arena.history.length}\nLeaders: ${Object.values(arena.leaderboard).slice(0,5).map(l=>`${l.playerId} (${l.wins}W)`).join(", ") || "none yet"}`,keyboard:TELEGRAM_BUTTONS.main.reply_markup};
+}
+
+if(data==="sample_duel")
+return {combo:"👊🏻🖖🏻🙏🏻",opponent:"✋🏻🤟🏻🙏🏻"};
+
+return {text:"Send a sealed combo first, then use the combo buttons.",keyboard:TELEGRAM_BUTTONS.main.reply_markup};
+}
+
+async function handleTelegramUpdate(request,env){
+let update={};
+try{
+update=await request.json();
+}catch{
+return json({error:"Invalid Telegram update"},400);
+}
+
+const message=update.message || update.edited_message;
+const callback=update.callback_query;
+const callbackMessage=callback?.message;
+const chatId=message?.chat?.id || callbackMessage?.chat?.id;
+
+if(!chatId)
+return json({ok:true,ignored:true});
+
+if(callback){
+const data=callback.data;
+await answerCallback(env,callback,"Opening panel");
+
+const sourceText=callbackMessage?.text || "";
+const lastCombo=latestUserCombo(sourceText);
+
+if(["analyze_last","queue_last_butler","duel_last_sample"].includes(data) && lastCombo){
+const parsedResult=parseTechnique(lastCombo);
+if(parsedResult.error)
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,`⚠️ ${telegramSafe(parsedResult.error)}`,TELEGRAM_BUTTONS.main));
+else if(data==="analyze_last"){
+const parsed=await decorateTechnique(parsedResult);
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,`🔍 <b>Analysis</b>\n${telegramSafe(analyze(parsed.combo).join("\n"))}\n\n${formatTechniqueResult({name:parsed.name,technique:parsed.decoded,rank:rank(parsed.spell),stats:parsed.spell})}`,TELEGRAM_BUTTONS.combo));
+}else if(data==="queue_last_butler"){
+const arena=await loadArena(env);
+const entry=await createQueueEntry({combo:lastCombo,playerId:String(callback.from?.id || chatId)});
+if(entry.error)
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,`⚠️ ${telegramSafe(entry.error)}`,TELEGRAM_BUTTONS.main));
+else{
+arena.queue.push(entry);
+arena.queue.push(await createQueueEntry({combo:aiComboForButler(arena.aiButler),playerId:arena.aiButler.id,isAi:true}));
+const resolved=await resolveArena(arena);
+await saveArena(env,arena);
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,`🏟 Queued ${telegramSafe(entry.name)}. Resolved battles: ${resolved}.\n${arena.history[0] ? `Latest winner: ${telegramSafe(arena.history[0].winner)}` : "Waiting for a match."}`,TELEGRAM_BUTTONS.main));
+}
+}else
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,`⚔️ Use this opponent sample: ✋🏻🤟🏻🙏🏻`,TELEGRAM_BUTTONS.main));
+return json({ok:true});
+}
+
+const panel=await telegramTextForCallback(data,env);
+if(panel.combo){
+const p=await decorateTechnique(parseTechnique(panel.combo));
+const o=await decorateTechnique(parseTechnique(panel.opponent));
+const duel=await simulateBattle(p,o);
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,`⚔️ <b>Sample Duel</b>\n${telegramSafe(panel.combo)} vs ${telegramSafe(panel.opponent)}\nWinner: <b>${telegramSafe(duel.winner)}</b>`,TELEGRAM_BUTTONS.main));
+}else{
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,panel.text,{reply_markup:panel.keyboard}));
+}
+return json({ok:true});
+}
+
+const text=(message.text || "").trim();
+const parsed=parseTechnique(text);
+if(parsed.error){
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,formatTelegramHelp(),TELEGRAM_BUTTONS.main));
+return json({ok:true});
+}
+
+const decorated=await decorateTechnique(parsed);
+await telegramRequest(env,"sendMessage",telegramMessage(chatId,formatTechniqueResult({name:decorated.name,technique:decorated.decoded,rank:rank(decorated.spell),stats:decorated.spell}),TELEGRAM_BUTTONS.combo));
+return json({ok:true});
+}
 
 
 function parseEmojis(input){
@@ -1136,6 +1342,11 @@ const url=new URL(request.url);
 
 
 const path=url.pathname;
+
+
+
+if(path==="/telegram")
+return handleTelegramUpdate(request,env);
 
 
 
