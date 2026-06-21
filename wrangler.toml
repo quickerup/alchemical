@@ -1,4 +1,4 @@
-name = "jutsumoji"
+name = "alchemical"
 main = "src/worker.js"
 compatibility_date = "2025-02-04"
 
@@ -17,4 +17,4 @@ preview_id = "<ID_OF_PREVIEW_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
 
 [[kv_namespaces]]
 binding = "BOT_SESSIONS"
-id = "xxxxxxxx"
+id = "bcdd232eae7543cb910b5e4523c88731"
