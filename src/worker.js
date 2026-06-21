@@ -81,6 +81,9 @@ commands:[
 "/rules",
 "Learn combat",
 
+"/duel?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻🤟🏻🙏🏻",
+"Compare two techniques in combat",
+
 "/train",
 "Begin training"
 
@@ -122,6 +125,9 @@ Kinetic > Mystic
 Mystic > Barrier
 
 Barrier > Kinetic
+
+Repeat matching forces for synergy bonuses.
+Last hand sign before 🙏🏻 can unlock a finisher.
 `
 
 },
@@ -285,6 +291,8 @@ className="Mystic";
 
 
 
+const total=atk+def+spe;
+
 return {
 
 atk,
@@ -292,6 +300,7 @@ def,
 spe,
 
 class:className,
+power:total,
 
 types:[...new Set(types)]
 
@@ -305,10 +314,11 @@ types:[...new Set(types)]
 
 function rank(spell){
 
-let total=
+let total=spell.power ?? (
 spell.atk+
 spell.def+
-spell.spe;
+spell.spe
+);
 
 
 if(total>100)
@@ -328,6 +338,83 @@ return "C";
 }
 
 
+
+function applyFinisher(spell,last){
+
+const finisher=FINISHERS[last];
+
+if(!finisher)
+return spell;
+
+const boosted={...spell};
+
+if(finisher.atk) boosted.atk+=finisher.atk;
+if(finisher.def) boosted.def+=finisher.def;
+if(finisher.spe) boosted.spe+=finisher.spe;
+
+boosted.finisher=finisher.name;
+boosted.power=boosted.atk+boosted.def+boosted.spe;
+
+return boosted;
+
+}
+
+
+
+function forceAdvantage(attacker,defender){
+
+if(attacker.class===defender.class)
+return 0;
+
+if(
+(attacker.class==="Kinetic" && defender.class==="Mystic") ||
+(attacker.class==="Mystic" && defender.class==="Barrier") ||
+(attacker.class==="Barrier" && defender.class==="Kinetic")
+)
+return 8;
+
+return -8;
+
+}
+
+
+
+function scoreDuelist(spell,opponent){
+
+return spell.atk*1.15 + spell.def + spell.spe*0.9 + forceAdvantage(spell,opponent);
+
+}
+
+
+
+function parseTechnique(input){
+
+if(!input)
+return {error:"Missing combo",status:400};
+
+const decoded=decodeURIComponent(input);
+
+if(!decoded.endsWith(FINISHER))
+return {error:"Every technique must end with 🙏🏻",status:400};
+
+const core=decoded.slice(0,decoded.length-FINISHER.length);
+
+const combo=parseEmojis(core);
+
+if(!combo)
+return {error:"Unknown gesture detected",status:400};
+
+if(combo.length<1)
+return {error:"Choose at least one hand sign before 🙏🏻",status:400};
+
+if(combo.length>5)
+return {error:"Training rules allow 1-5 hand signs before 🙏🏻",status:400};
+
+const spell=applyFinisher(buildSpell(combo),combo[combo.length-1]);
+
+return {decoded,combo,spell};
+
+}
 
 
 
@@ -415,7 +502,8 @@ gestures:GESTURES
 
 if(
 path!=="/lookup" &&
-path!=="/analyze"
+path!=="/analyze" &&
+path!=="/duel"
 )
 
 return json({
@@ -429,69 +517,37 @@ error:"Unknown command"
 let input=url.searchParams.get("combo");
 
 
-if(!input)
-return json({
-error:"Missing combo"
-},400);
+let parsed=parseTechnique(input);
+
+if(parsed.error)
+return json({error:parsed.error},parsed.status);
+
+let {decoded,combo,spell}=parsed;
 
 
+if(path==="/duel"){
 
+const opponentInput=url.searchParams.get("opponent");
+const opponent=parseTechnique(opponentInput);
 
-let decoded=decodeURIComponent(input);
+if(opponent.error)
+return json({error:`Opponent: ${opponent.error}`},opponent.status);
 
+const playerScore=scoreDuelist(spell,opponent.spell);
+const opponentScore=scoreDuelist(opponent.spell,spell);
 
+let outcome="draw";
 
-if(!decoded.endsWith(FINISHER))
-
-return json({
-
-error:"Every technique must end with 🙏🏻"
-
-},400);
-
-
-
-
-let core=
-decoded.slice(
-0,
-decoded.length-FINISHER.length
-);
-
-
-
-let combo=parseEmojis(core);
-
-
-
-if(!combo)
+if(playerScore>opponentScore) outcome="win";
+if(opponentScore>playerScore) outcome="loss";
 
 return json({
-
-error:"Unknown gesture detected"
-
-},400);
-
-
-
-
-
-
-let spell=buildSpell(combo);
-
-
-
-
-
-let last=combo[combo.length-1];
-
-
-if(FINISHERS[last]){
-
-spell={
-...spell,
-...FINISHERS[last]
-};
+status:"success",
+outcome,
+combo:{technique:decoded,class:spell.class,rank:rank(spell),score:Number(playerScore.toFixed(2)),stats:spell},
+opponent:{technique:opponent.decoded,class:opponent.spell.class,rank:rank(opponent.spell),score:Number(opponentScore.toFixed(2)),stats:opponent.spell},
+forceRule:"Kinetic > Mystic > Barrier > Kinetic"
+});
 
 }
 
