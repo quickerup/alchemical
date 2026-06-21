@@ -1,4 +1,21 @@
 const FINISHER = "🙏🏻";
+const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
+
+const MEMORY_ARENA = {
+queue:[],
+activeBattles:[],
+history:[],
+leaderboard:{},
+aiButler:{
+id:"AI-BUTLER-1",
+name:"AI Butler",
+history:[],
+winRate:0.5,
+preferredStyle:"Mystic",
+adaptationLevel:0.1
+}
+};
+
 
 
 const GESTURES = {
@@ -91,7 +108,19 @@ commands:[
 "Verify a deterministic match",
 
 "/train",
-"Begin training"
+"Begin training",
+
+"POST /queue",
+"Submit a sealed technique into the asynchronous arena queue",
+
+"/arena",
+"View persistent arena queue, history, leaderboard and AI Butler state",
+
+"/battle/:id",
+"Replay a completed arena battle",
+
+"/butler",
+"Inspect the evolving AI Butler opponent"
 
 ]
 
@@ -526,6 +555,211 @@ winner
 
 
 
+async function loadArena(env){
+
+if(env?.ARENA_KV){
+const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
+if(stored)
+return stored;
+}
+
+return MEMORY_ARENA;
+
+}
+
+
+
+async function saveArena(env,arena){
+
+if(env?.ARENA_KV)
+await env.ARENA_KV.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
+
+MEMORY_ARENA.queue=arena.queue;
+MEMORY_ARENA.activeBattles=arena.activeBattles;
+MEMORY_ARENA.history=arena.history;
+MEMORY_ARENA.leaderboard=arena.leaderboard;
+MEMORY_ARENA.aiButler=arena.aiButler;
+
+}
+
+
+
+function nowId(prefix){
+
+return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(16).slice(2,6).toUpperCase()}`;
+
+}
+
+
+
+function dominantType(spell){
+
+return spell.class.toLowerCase();
+
+}
+
+
+
+function isCompatible(a,b){
+
+if(a.playerId===b.playerId)
+return false;
+
+const powerGap=Math.abs(a.spell.power-b.spell.power);
+const maxPower=Math.max(a.spell.power,b.spell.power,1);
+const fairPower=powerGap/maxPower<=0.35;
+const styleContrast=dominantType(a.spell)!==dominantType(b.spell);
+
+return fairPower || styleContrast || a.riskQueue || b.riskQueue;
+
+}
+
+
+
+function findMatch(queue){
+
+let fallback=null;
+
+for(let i=0;i<queue.length;i++){
+for(let j=i+1;j<queue.length;j++){
+if(queue[i].playerId===queue[j].playerId)
+continue;
+
+if(isCompatible(queue[i],queue[j]))
+return [i,j];
+
+fallback ??= [i,j];
+}
+}
+
+return fallback;
+
+}
+
+
+
+function recordLeaderboard(arena,winnerId,loserId,draw=false){
+
+for(const id of [winnerId,loserId]){
+if(!arena.leaderboard[id])
+arena.leaderboard[id]={playerId:id,wins:0,losses:0,draws:0,battles:0};
+}
+
+arena.leaderboard[winnerId].battles++;
+arena.leaderboard[loserId].battles++;
+
+if(draw){
+arena.leaderboard[winnerId].draws++;
+arena.leaderboard[loserId].draws++;
+return;
+}
+
+arena.leaderboard[winnerId].wins++;
+arena.leaderboard[loserId].losses++;
+
+}
+
+
+
+function aiComboForButler(ai){
+
+if(ai.winRate<0.4)
+return "✋🏻👐🏻🤲🏻🙏🏻";
+
+if(ai.preferredStyle==="Kinetic")
+return "👊🏻🤜🏻✊🏻🙏🏻";
+
+if(ai.preferredStyle==="Barrier")
+return "✋🏻🤚🏻👐🏻🙏🏻";
+
+return "🖖🏻🤞🏻🤟🏻🙏🏻";
+
+}
+
+
+
+async function createQueueEntry({combo,playerId,riskQueue=false,isAi=false}){
+
+let parsed=parseTechnique(combo);
+if(parsed.error)
+return {error:parsed.error,status:parsed.status};
+
+parsed=await decorateTechnique(parsed);
+
+return {
+id:nowId("QUEUE"),
+playerId:playerId || (isAi ? "AI-BUTLER-1" : "anonymous"),
+combo:parsed.decoded,
+techniqueId:parsed.id,
+name:parsed.name,
+spell:parsed.spell,
+status:"waiting",
+riskQueue,
+isAi,
+createdAt:new Date().toISOString()
+};
+
+}
+
+
+
+async function resolveArena(arena){
+
+let matched=0;
+
+while(arena.queue.length>1){
+const pair=findMatch(arena.queue);
+if(!pair)
+break;
+
+const [high,low]=pair.sort((a,b)=>b-a);
+const second=arena.queue.splice(high,1)[0];
+const first=arena.queue.splice(low,1)[0];
+
+const battleId=nowId("BATTLE");
+const player={decoded:first.combo,spell:first.spell,id:first.techniqueId,name:first.playerId};
+const opponent={decoded:second.combo,spell:second.spell,id:second.techniqueId,name:second.playerId};
+const replay=await simulateBattle(player,opponent,battleId);
+const winnerId=replay.winner==="Player 1" ? first.playerId : replay.winner==="Player 2" ? second.playerId : "Draw";
+
+const battle={
+id:battleId,
+status:"complete",
+fighters:[first,second],
+timeline:[
+`${first.playerId} casts ${first.name}`,
+`${second.playerId} responds with ${second.name}`,
+...replay.analysis,
+`Outcome: ${winnerId}`
+],
+winner:winnerId,
+replay,
+createdAt:new Date().toISOString(),
+completedAt:new Date().toISOString()
+};
+
+arena.history.unshift(battle);
+recordLeaderboard(arena,first.playerId,second.playerId,winnerId==="Draw");
+
+if(first.isAi || second.isAi){
+const aiWon=winnerId===arena.aiButler.id;
+arena.aiButler.history.unshift({battleId,winner:winnerId,at:battle.completedAt});
+arena.aiButler.history=arena.aiButler.history.slice(0,25);
+const wins=arena.aiButler.history.filter(h=>h.winner===arena.aiButler.id).length;
+arena.aiButler.winRate=Number((wins/arena.aiButler.history.length).toFixed(2));
+arena.aiButler.adaptationLevel=Number(Math.min(1,arena.aiButler.adaptationLevel+(aiWon ? 0.01 : 0.05)).toFixed(2));
+if(!aiWon)
+arena.aiButler.preferredStyle=first.isAi ? second.spell.class : first.spell.class;
+}
+
+matched++;
+}
+
+return matched;
+
+}
+
+
 function parseTechnique(input){
 
 if(!input)
@@ -600,7 +834,7 @@ headers:{
 export default {
 
 
-async fetch(request){
+async fetch(request,env){
 
 
 const url=new URL(request.url);
@@ -622,6 +856,67 @@ return json(CODEX.rules);
 
 if(path==="/train")
 return json(CODEX.train);
+
+
+
+if(path==="/arena" || path==="/butler" || path.startsWith("/battle/") || path==="/queue"){
+const arena=await loadArena(env);
+
+if(path==="/arena")
+return json({
+queue:arena.queue,
+activeBattles:arena.activeBattles,
+history:arena.history.slice(0,25),
+leaderboard:Object.values(arena.leaderboard).sort((a,b)=>b.wins-a.wins || a.losses-b.losses),
+aiButler:arena.aiButler
+});
+
+if(path==="/butler")
+return json({
+...arena.aiButler,
+nextCombo:aiComboForButler(arena.aiButler),
+behavior:"Queues adaptive techniques, learns from losses, and shifts preferred style toward winning counters."
+});
+
+if(path.startsWith("/battle/")){
+const battleId=decodeURIComponent(path.split("/").pop());
+const battle=arena.history.find(b=>b.id===battleId || b.replay?.match?.id===battleId);
+return battle ? json(battle) : json({error:"Battle not found"},404);
+}
+
+if(request.method!=="POST" && request.method!=="GET")
+return json({error:"Use POST /queue to submit a technique or GET /queue to inspect waiting entries"},405);
+
+if(request.method==="GET")
+return json({queue:arena.queue});
+
+let body={};
+try{
+body=await request.json();
+}catch{
+body={};
+}
+
+const combo=body.combo || url.searchParams.get("combo");
+const playerId=body.playerId || url.searchParams.get("player") || "anonymous";
+const riskQueue=Boolean(body.riskQueue || url.searchParams.get("riskQueue"));
+const entry=await createQueueEntry({combo,playerId,riskQueue});
+
+if(entry.error)
+return json({error:entry.error},entry.status);
+
+arena.queue.push(entry);
+
+if(body.includeButler || url.searchParams.get("butler")==="true")
+arena.queue.push(await createQueueEntry({combo:aiComboForButler(arena.aiButler),playerId:arena.aiButler.id,isAi:true}));
+
+const resolved=await resolveArena(arena);
+await saveArena(env,arena);
+
+return json({status:"queued",entry,resolved,queueDepth:arena.queue.length,latestBattle:arena.history[0] ?? null},201);
+}
+
+
 
 
 
