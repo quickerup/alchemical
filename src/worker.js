@@ -84,6 +84,12 @@ commands:[
 "/duel?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻🤟🏻🙏🏻",
 "Compare two techniques in combat",
 
+"/simulate?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻",
+"Replay a deterministic duel",
+
+"/replay?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻&matchId=MATCH-123",
+"Verify a deterministic match",
+
 "/train",
 "Begin training"
 
@@ -128,6 +134,9 @@ Barrier > Kinetic
 
 Repeat matching forces for synergy bonuses.
 Last hand sign before 🙏🏻 can unlock a finisher.
+
+Duel simulations are deterministic: the same combos and match ID always replay the same result.
+Technique IDs are generated from each sealed combo for leaderboards and match history.
 `
 
 },
@@ -201,6 +210,36 @@ return result;
 }
 
 
+
+
+
+function encodeHex(buffer){
+
+return Array.from(new Uint8Array(buffer))
+.map(b=>b.toString(16).padStart(2,"0"))
+.join("");
+
+}
+
+
+
+async function sha256Hex(value){
+
+const bytes=new TextEncoder().encode(value);
+const digest=await crypto.subtle.digest("SHA-256",bytes);
+
+return encodeHex(digest);
+
+}
+
+
+
+function seedNumber(seed,index){
+
+const slice=seed.slice(index*8,index*8+8);
+return parseInt(slice,16) / 0xffffffff;
+
+}
 
 
 
@@ -291,7 +330,14 @@ className="Mystic";
 
 
 
-const total=atk+def+spe;
+const baseTotal=atk+def+spe;
+const uniqueSigns=new Set(combo).size;
+const repetitionPenalty=(combo.length-uniqueSigns)*4;
+const diversityBonus=uniqueSigns*2;
+const complexityBonus=Math.max(0,combo.length-2)*3;
+const power=Math.max(1,baseTotal + diversityBonus + complexityBonus - repetitionPenalty);
+const cost=Math.ceil(power*0.38 + combo.length*3);
+const risk=Math.max(1,Math.floor((atk*0.24 + spe*0.18) - (def*0.12) + repetitionPenalty));
 
 return {
 
@@ -300,7 +346,14 @@ def,
 spe,
 
 class:className,
-power:total,
+power,
+cost,
+risk,
+modifiers:{
+diversityBonus,
+complexityBonus,
+repetitionPenalty
+},
 
 types:[...new Set(types)]
 
@@ -353,7 +406,9 @@ if(finisher.def) boosted.def+=finisher.def;
 if(finisher.spe) boosted.spe+=finisher.spe;
 
 boosted.finisher=finisher.name;
-boosted.power=boosted.atk+boosted.def+boosted.spe;
+boosted.power=boosted.atk+boosted.def+boosted.spe + (boosted.modifiers?.diversityBonus ?? 0) + (boosted.modifiers?.complexityBonus ?? 0) - (boosted.modifiers?.repetitionPenalty ?? 0);
+boosted.cost=Math.ceil(boosted.power*0.38);
+boosted.risk=Math.max(1,Math.floor((boosted.atk*0.24 + boosted.spe*0.18) - (boosted.def*0.12) + (boosted.modifiers?.repetitionPenalty ?? 0)));
 
 return boosted;
 
@@ -379,9 +434,93 @@ return -8;
 
 
 
-function scoreDuelist(spell,opponent){
+function scoreDuelist(spell,opponent,seed=0){
 
-return spell.atk*1.15 + spell.def + spell.spe*0.9 + forceAdvantage(spell,opponent);
+const deterministicPressure=(seed-0.5)*6;
+return spell.atk*1.15 + spell.def + spell.spe*0.9 + forceAdvantage(spell,opponent) - spell.cost*0.08 - spell.risk*0.12 + deterministicPressure;
+
+}
+
+
+
+function describeTechnique(spell){
+
+const prefix=spell.spe>=spell.atk && spell.spe>=spell.def ? "Celestial" : spell.def>=spell.atk ? "Heavenly" : "Iron";
+const core=spell.class==="Kinetic" ? "Fang" : spell.class==="Barrier" ? "Fortress" : "Seal";
+return `${prefix} ${spell.class} ${core}`;
+
+}
+
+
+
+function forceAnalysis(attacker,defender){
+
+const advantage=forceAdvantage(attacker,defender);
+
+if(advantage>0)
+return `${attacker.class} pressures ${defender.class}`;
+
+if(advantage<0)
+return `${defender.class} resists ${attacker.class}`;
+
+return `${attacker.class} and ${defender.class} cancel evenly`;
+
+}
+
+
+
+async function decorateTechnique(parsed){
+
+const idHash=await sha256Hex(parsed.decoded);
+return {
+...parsed,
+id:`JUTSU-${idHash.slice(0,5).toUpperCase()}`,
+name:describeTechnique(parsed.spell)
+};
+
+}
+
+
+
+async function simulateBattle(player,opponent,requestedMatchId){
+
+const canonical=[player.decoded,opponent.decoded,requestedMatchId ?? ""].join("|");
+const matchHash=await sha256Hex(canonical);
+const matchId=requestedMatchId || `MATCH-${matchHash.slice(0,10).toUpperCase()}`;
+const seed=await sha256Hex(`${player.decoded}|${opponent.decoded}|${matchId}`);
+
+const playerScore=scoreDuelist(player.spell,opponent.spell,seedNumber(seed,0));
+const opponentScore=scoreDuelist(opponent.spell,player.spell,seedNumber(seed,1));
+const playerDamage=Math.max(0,Math.round(playerScore - opponent.spell.def*0.35 + seedNumber(seed,2)*5));
+const opponentDamage=Math.max(0,Math.round(opponentScore - player.spell.def*0.35 + seedNumber(seed,3)*5));
+
+let winner="Draw";
+if(playerDamage>opponentDamage) winner="Player 1";
+if(opponentDamage>playerDamage) winner="Player 2";
+
+return {
+match:{
+id:matchId,
+seed,
+player1:player.name,
+player2:opponent.name,
+player1TechniqueId:player.id,
+player2TechniqueId:opponent.id
+},
+analysis:[
+`Player 1 created a ${player.spell.types.join("-")} ${player.spell.class} technique`,
+`Player 2 created a ${opponent.spell.types.join("-")} ${opponent.spell.class} technique`,
+forceAnalysis(player.spell,opponent.spell),
+forceAnalysis(opponent.spell,player.spell),
+`Player 1 cost ${player.spell.cost} with risk ${player.spell.risk}`,
+`Player 2 cost ${opponent.spell.cost} with risk ${opponent.spell.risk}`
+],
+rounds:[
+{attacker:"Player 1",damage:playerDamage,score:Number(playerScore.toFixed(2))},
+{attacker:"Player 2",damage:opponentDamage,score:Number(opponentScore.toFixed(2))}
+],
+winner
+};
 
 }
 
@@ -503,7 +642,9 @@ gestures:GESTURES
 if(
 path!=="/lookup" &&
 path!=="/analyze" &&
-path!=="/duel"
+path!=="/duel" &&
+path!=="/simulate" &&
+path!=="/replay"
 )
 
 return json({
@@ -522,10 +663,11 @@ let parsed=parseTechnique(input);
 if(parsed.error)
 return json({error:parsed.error},parsed.status);
 
-let {decoded,combo,spell}=parsed;
+parsed=await decorateTechnique(parsed);
+let {decoded,combo,spell,id,name}=parsed;
 
 
-if(path==="/duel"){
+if(path==="/duel" || path==="/simulate" || path==="/replay"){
 
 const opponentInput=url.searchParams.get("opponent");
 const opponent=parseTechnique(opponentInput);
@@ -533,19 +675,14 @@ const opponent=parseTechnique(opponentInput);
 if(opponent.error)
 return json({error:`Opponent: ${opponent.error}`},opponent.status);
 
-const playerScore=scoreDuelist(spell,opponent.spell);
-const opponentScore=scoreDuelist(opponent.spell,spell);
-
-let outcome="draw";
-
-if(playerScore>opponentScore) outcome="win";
-if(opponentScore>playerScore) outcome="loss";
+const decoratedOpponent=await decorateTechnique(opponent);
+const replay=await simulateBattle(parsed,decoratedOpponent,url.searchParams.get("matchId"));
 
 return json({
 status:"success",
-outcome,
-combo:{technique:decoded,class:spell.class,rank:rank(spell),score:Number(playerScore.toFixed(2)),stats:spell},
-opponent:{technique:opponent.decoded,class:opponent.spell.class,rank:rank(opponent.spell),score:Number(opponentScore.toFixed(2)),stats:opponent.spell},
+...replay,
+combo:{id,name,technique:decoded,class:spell.class,rank:rank(spell),stats:spell},
+opponent:{id:decoratedOpponent.id,name:decoratedOpponent.name,technique:decoratedOpponent.decoded,class:decoratedOpponent.spell.class,rank:rank(decoratedOpponent.spell),stats:decoratedOpponent.spell},
 forceRule:"Kinetic > Mystic > Barrier > Kinetic"
 });
 
@@ -558,6 +695,10 @@ forceRule:"Kinetic > Mystic > Barrier > Kinetic"
 if(path==="/analyze")
 
 return json({
+
+id,
+
+name,
 
 technique:decoded,
 
@@ -579,6 +720,10 @@ stats:spell
 return json({
 
 status:"success",
+
+id,
+
+name,
 
 technique:decoded,
 
