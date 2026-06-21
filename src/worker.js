@@ -1,4 +1,5 @@
 const FINISHER = "🙏🏻";
+const MAX_HAND_SIGNS = 5;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
 
 const MEMORY_ARENA = {
@@ -50,7 +51,25 @@ const GESTURES = {
 "🤟🏻":{name:"Love",atk:2,def:4,spe:8,type:"mystic"},
 "🤞🏻":{name:"Cross",atk:4,def:3,spe:7,type:"mystic"},
 "✌🏻":{name:"Peace",atk:3,def:4,spe:7,type:"mystic"},
-"🤌🏻":{name:"Kiss",atk:4,def:4,spe:6,type:"mystic"}
+"🤌🏻":{name:"Kiss",atk:4,def:4,spe:6,type:"mystic"},
+"🫳🏻":{name:"Palm Down",atk:5,def:4,spe:1,type:"barrier"},
+"🫴🏻":{name:"Palm Up",atk:3,def:5,spe:4,type:"mystic"},
+"🫲🏻":{name:"Leftward Hand",atk:5,def:3,spe:2,type:"kinetic"},
+"🫱🏻":{name:"Rightward Hand",atk:5,def:3,spe:2,type:"kinetic"},
+"👋🏻":{name:"Wave",atk:2,def:3,spe:7,type:"mystic"},
+"🫰🏻":{name:"Snap",atk:5,def:2,spe:7,type:"mystic"},
+"🤙🏻":{name:"Call",atk:3,def:3,spe:8,type:"mystic"},
+"🤏🏻":{name:"Pinch",atk:5,def:4,spe:5,type:"mystic"},
+"👌🏻":{name:"Focus",atk:4,def:5,spe:6,type:"mystic"},
+"🫵🏻":{name:"Challenge",atk:7,def:2,spe:3,type:"kinetic"},
+"👉🏻":{name:"Point Right",atk:5,def:2,spe:5,type:"kinetic"},
+"👈🏻":{name:"Point Left",atk:5,def:2,spe:5,type:"kinetic"},
+"☝🏻":{name:"Index Up",atk:3,def:4,spe:8,type:"mystic"},
+"👆🏻":{name:"Point Up",atk:4,def:3,spe:7,type:"mystic"},
+"👇🏻":{name:"Point Down",atk:6,def:4,spe:3,type:"kinetic"},
+"🖕🏻":{name:"Defiance",atk:8,def:1,spe:3,type:"kinetic"},
+"✍🏻":{name:"Script",atk:2,def:4,spe:8,type:"mystic"},
+"🤳🏻":{name:"Mirror",atk:2,def:6,spe:6,type:"barrier"}
 
 };
 
@@ -191,7 +210,7 @@ message:
 TRAINING MODE
 
 Step 1:
-Choose 1-5 hand signs.
+Choose 1-5 hand signs from the gesture list.
 
 Step 2:
 Mix power, defense and energy.
@@ -204,7 +223,7 @@ Discover your spell.
 
 Example:
 
-👊🏻🖖🏻🤞🏻🙏🏻
+💪🏻👏🏻👍🏻🫶🏻🙌🏻🙏🏻
 `
 
 }
@@ -1032,8 +1051,8 @@ return {error:"Unknown gesture detected",status:400};
 if(combo.length<1)
 return {error:"Choose at least one hand sign before 🙏🏻",status:400};
 
-if(combo.length>5)
-return {error:"Training rules allow 1-5 hand signs before 🙏🏻",status:400};
+if(combo.length>MAX_HAND_SIGNS)
+return {error:`Training rules allow 1-${MAX_HAND_SIGNS} hand signs before 🙏🏻`,status:400};
 
 const spell=applyFinisher(buildSpell(combo),combo[combo.length-1]);
 
