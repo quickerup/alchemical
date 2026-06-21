@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS signature_jutsu (
   combo TEXT,
   atk INTEGER,
   def INTEGER,
-  spe INTEGER,
+  spc INTEGER,
   class TEXT,
   usage_count INTEGER DEFAULT 0,
   wins INTEGER DEFAULT 0,

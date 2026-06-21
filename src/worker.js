@@ -21,55 +21,55 @@ adaptationLevel:0.1
 
 const GESTURES = {
 
-"💪🏻":{name:"Flex",atk:6,def:2,spe:2,type:"kinetic"},
-"👏🏻":{name:"Clap",atk:3,def:4,spe:3,type:"barrier"},
-"👍🏻":{name:"Up",atk:4,def:4,spe:2,type:"barrier"},
-"👎🏻":{name:"Down",atk:4,def:3,spe:3,type:"kinetic"},
+"💪🏻":{name:"Flex",atk:6,def:2,spc:2,type:"kinetic"},
+"👏🏻":{name:"Clap",atk:3,def:4,spc:3,type:"barrier"},
+"👍🏻":{name:"Up",atk:4,def:4,spc:2,type:"barrier"},
+"👎🏻":{name:"Down",atk:4,def:3,spc:3,type:"kinetic"},
 
-"🫶🏻":{name:"Heart",atk:2,def:5,spe:6,type:"mystic"},
-"🙌🏻":{name:"Raise",atk:4,def:4,spe:5,type:"mystic"},
-"👐🏻":{name:"Open",atk:3,def:6,spe:1,type:"barrier"},
-"🤲🏻":{name:"Cup",atk:1,def:6,spe:3,type:"barrier"},
-
-
-"🤜🏻":{name:"Right Hook",atk:9,def:1,spe:0,type:"kinetic"},
-"🤛🏻":{name:"Left Hook",atk:9,def:1,spe:0,type:"kinetic"},
-"✊🏻":{name:"Fist",atk:8,def:2,spe:0,type:"kinetic"},
-"👊🏻":{name:"Strike",atk:8,def:2,spe:0,type:"kinetic"},
+"🫶🏻":{name:"Heart",atk:2,def:5,spc:6,type:"mystic"},
+"🙌🏻":{name:"Raise",atk:4,def:4,spc:5,type:"mystic"},
+"👐🏻":{name:"Open",atk:3,def:6,spc:1,type:"barrier"},
+"🤲🏻":{name:"Cup",atk:1,def:6,spc:3,type:"barrier"},
 
 
-"🫸🏻":{name:"Thrust",atk:7,def:3,spe:0,type:"kinetic"},
-"🫷🏻":{name:"Reverse Thrust",atk:7,def:3,spe:0,type:"kinetic"},
+"🤜🏻":{name:"Right Hook",atk:9,def:1,spc:0,type:"kinetic"},
+"🤛🏻":{name:"Left Hook",atk:9,def:1,spc:0,type:"kinetic"},
+"✊🏻":{name:"Fist",atk:8,def:2,spc:0,type:"kinetic"},
+"👊🏻":{name:"Strike",atk:8,def:2,spc:0,type:"kinetic"},
 
 
-"🤚🏻":{name:"Guard",atk:1,def:8,spe:1,type:"barrier"},
-"🖐🏻":{name:"Palm",atk:2,def:8,spe:0,type:"barrier"},
-"✋🏻":{name:"Stop",atk:1,def:9,spe:0,type:"barrier"},
+"🫸🏻":{name:"Thrust",atk:7,def:3,spc:0,type:"kinetic"},
+"🫷🏻":{name:"Reverse Thrust",atk:7,def:3,spc:0,type:"kinetic"},
 
 
-"🖖🏻":{name:"Vulcan",atk:3,def:3,spe:9,type:"mystic"},
-"🤟🏻":{name:"Love",atk:2,def:4,spe:8,type:"mystic"},
-"🤞🏻":{name:"Cross",atk:4,def:3,spe:7,type:"mystic"},
-"✌🏻":{name:"Peace",atk:3,def:4,spe:7,type:"mystic"},
-"🤌🏻":{name:"Kiss",atk:4,def:4,spe:6,type:"mystic"},
-"🫳🏻":{name:"Palm Down",atk:5,def:4,spe:1,type:"barrier"},
-"🫴🏻":{name:"Palm Up",atk:3,def:5,spe:4,type:"mystic"},
-"🫲🏻":{name:"Leftward Hand",atk:5,def:3,spe:2,type:"kinetic"},
-"🫱🏻":{name:"Rightward Hand",atk:5,def:3,spe:2,type:"kinetic"},
-"👋🏻":{name:"Wave",atk:2,def:3,spe:7,type:"mystic"},
-"🫰🏻":{name:"Snap",atk:5,def:2,spe:7,type:"mystic"},
-"🤙🏻":{name:"Call",atk:3,def:3,spe:8,type:"mystic"},
-"🤏🏻":{name:"Pinch",atk:5,def:4,spe:5,type:"mystic"},
-"👌🏻":{name:"Focus",atk:4,def:5,spe:6,type:"mystic"},
-"🫵🏻":{name:"Challenge",atk:7,def:2,spe:3,type:"kinetic"},
-"👉🏻":{name:"Point Right",atk:5,def:2,spe:5,type:"kinetic"},
-"👈🏻":{name:"Point Left",atk:5,def:2,spe:5,type:"kinetic"},
-"☝🏻":{name:"Index Up",atk:3,def:4,spe:8,type:"mystic"},
-"👆🏻":{name:"Point Up",atk:4,def:3,spe:7,type:"mystic"},
-"👇🏻":{name:"Point Down",atk:6,def:4,spe:3,type:"kinetic"},
-"🖕🏻":{name:"Defiance",atk:8,def:1,spe:3,type:"kinetic"},
-"✍🏻":{name:"Script",atk:2,def:4,spe:8,type:"mystic"},
-"🤳🏻":{name:"Mirror",atk:2,def:6,spe:6,type:"barrier"}
+"🤚🏻":{name:"Guard",atk:1,def:8,spc:1,type:"barrier"},
+"🖐🏻":{name:"Palm",atk:2,def:8,spc:0,type:"barrier"},
+"✋🏻":{name:"Stop",atk:1,def:9,spc:0,type:"barrier"},
+
+
+"🖖🏻":{name:"Vulcan",atk:3,def:3,spc:9,type:"mystic"},
+"🤟🏻":{name:"Love",atk:2,def:4,spc:8,type:"mystic"},
+"🤞🏻":{name:"Cross",atk:4,def:3,spc:7,type:"mystic"},
+"✌🏻":{name:"Peace",atk:3,def:4,spc:7,type:"mystic"},
+"🤌🏻":{name:"Kiss",atk:4,def:4,spc:6,type:"mystic"},
+"🫳🏻":{name:"Palm Down",atk:5,def:4,spc:1,type:"barrier"},
+"🫴🏻":{name:"Palm Up",atk:3,def:5,spc:4,type:"mystic"},
+"🫲🏻":{name:"Leftward Hand",atk:5,def:3,spc:2,type:"kinetic"},
+"🫱🏻":{name:"Rightward Hand",atk:5,def:3,spc:2,type:"kinetic"},
+"👋🏻":{name:"Wave",atk:2,def:3,spc:7,type:"mystic"},
+"🫰🏻":{name:"Snap",atk:5,def:2,spc:7,type:"mystic"},
+"🤙🏻":{name:"Call",atk:3,def:3,spc:8,type:"mystic"},
+"🤏🏻":{name:"Pinch",atk:5,def:4,spc:5,type:"mystic"},
+"👌🏻":{name:"Focus",atk:4,def:5,spc:6,type:"mystic"},
+"🫵🏻":{name:"Challenge",atk:7,def:2,spc:3,type:"kinetic"},
+"👉🏻":{name:"Point Right",atk:5,def:2,spc:5,type:"kinetic"},
+"👈🏻":{name:"Point Left",atk:5,def:2,spc:5,type:"kinetic"},
+"☝🏻":{name:"Index Up",atk:3,def:4,spc:8,type:"mystic"},
+"👆🏻":{name:"Point Up",atk:4,def:3,spc:7,type:"mystic"},
+"👇🏻":{name:"Point Down",atk:6,def:4,spc:3,type:"kinetic"},
+"🖕🏻":{name:"Defiance",atk:8,def:1,spc:3,type:"kinetic"},
+"✍🏻":{name:"Script",atk:2,def:4,spc:8,type:"mystic"},
+"🤳🏻":{name:"Mirror",atk:2,def:6,spc:6,type:"barrier"}
 
 };
 
@@ -89,7 +89,7 @@ def:15
 
 "🖖🏻":{
 name:"Astral Seal",
-spe:15
+spc:15
 }
 
 };
@@ -321,7 +321,7 @@ function buildSpell(combo){
 
 let atk=0;
 let def=0;
-let spe=0;
+let spc=0;
 
 
 let types=[];
@@ -333,7 +333,7 @@ let g=GESTURES[e];
 
 atk+=g.atk;
 def+=g.def;
-spe+=g.spe;
+spc+=g.spc;
 
 types.push(g.type);
 
@@ -358,7 +358,7 @@ if(a.type==="barrier")
 def+=3;
 
 if(a.type==="mystic")
-spe+=3;
+spc+=3;
 
 }
 
@@ -368,18 +368,18 @@ spe+=3;
 
 atk=scale(atk);
 def=scale(def);
-spe=scale(spe);
+spc=scale(spc);
 
 
 
 let className;
 
 
-if(atk>=def && atk>=spe)
+if(atk>=def && atk>=spc)
 className="Kinetic";
 
 
-else if(def>=atk && def>=spe)
+else if(def>=atk && def>=spc)
 className="Barrier";
 
 
@@ -390,20 +390,20 @@ className="Mystic";
 
 
 
-const baseTotal=atk+def+spe;
+const baseTotal=atk+def+spc;
 const uniqueSigns=new Set(combo).size;
 const repetitionPenalty=(combo.length-uniqueSigns)*4;
 const diversityBonus=uniqueSigns*2;
 const complexityBonus=Math.max(0,combo.length-2)*3;
 const power=Math.max(1,baseTotal + diversityBonus + complexityBonus - repetitionPenalty);
 const cost=Math.ceil(power*0.38 + combo.length*3);
-const risk=Math.max(1,Math.floor((atk*0.24 + spe*0.18) - (def*0.12) + repetitionPenalty));
+const risk=Math.max(1,Math.floor((atk*0.24 + spc*0.18) - (def*0.12) + repetitionPenalty));
 
 return {
 
 atk,
 def,
-spe,
+spc,
 
 class:className,
 power,
@@ -430,7 +430,7 @@ function rank(spell){
 let total=spell.power ?? (
 spell.atk+
 spell.def+
-spell.spe
+spell.spc
 );
 
 
@@ -463,12 +463,12 @@ const boosted={...spell};
 
 if(finisher.atk) boosted.atk+=finisher.atk;
 if(finisher.def) boosted.def+=finisher.def;
-if(finisher.spe) boosted.spe+=finisher.spe;
+if(finisher.spc) boosted.spc+=finisher.spc;
 
 boosted.finisher=finisher.name;
-boosted.power=boosted.atk+boosted.def+boosted.spe + (boosted.modifiers?.diversityBonus ?? 0) + (boosted.modifiers?.complexityBonus ?? 0) - (boosted.modifiers?.repetitionPenalty ?? 0);
+boosted.power=boosted.atk+boosted.def+boosted.spc + (boosted.modifiers?.diversityBonus ?? 0) + (boosted.modifiers?.complexityBonus ?? 0) - (boosted.modifiers?.repetitionPenalty ?? 0);
 boosted.cost=Math.ceil(boosted.power*0.38);
-boosted.risk=Math.max(1,Math.floor((boosted.atk*0.24 + boosted.spe*0.18) - (boosted.def*0.12) + (boosted.modifiers?.repetitionPenalty ?? 0)));
+boosted.risk=Math.max(1,Math.floor((boosted.atk*0.24 + boosted.spc*0.18) - (boosted.def*0.12) + (boosted.modifiers?.repetitionPenalty ?? 0)));
 
 return boosted;
 
@@ -497,7 +497,7 @@ return -8;
 function scoreDuelist(spell,opponent,seed=0){
 
 const deterministicPressure=(seed-0.5)*6;
-return spell.atk*1.15 + spell.def + spell.spe*0.9 + forceAdvantage(spell,opponent) - spell.cost*0.08 - spell.risk*0.12 + deterministicPressure;
+return spell.atk*1.15 + spell.def + spell.spc*0.9 + forceAdvantage(spell,opponent) - spell.cost*0.08 - spell.risk*0.12 + deterministicPressure;
 
 }
 
@@ -505,7 +505,7 @@ return spell.atk*1.15 + spell.def + spell.spe*0.9 + forceAdvantage(spell,opponen
 
 function describeTechnique(spell){
 
-const prefix=spell.spe>=spell.atk && spell.spe>=spell.def ? "Celestial" : spell.def>=spell.atk ? "Heavenly" : "Iron";
+const prefix=spell.spc>=spell.atk && spell.spc>=spell.def ? "Celestial" : spell.def>=spell.atk ? "Heavenly" : "Iron";
 const core=spell.class==="Kinetic" ? "Fang" : spell.class==="Barrier" ? "Fortress" : "Seal";
 return `${prefix} ${spell.class} ${core}`;
 
@@ -750,7 +750,7 @@ const id=crypto.randomUUID();
 
 await env.DB.prepare(`
 INSERT INTO signature_jutsu
-(id, player_id, name, combo, atk, def, spe, class, created_at)
+(id, player_id, name, combo, atk, def, spc, class, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).bind(
 id,
@@ -759,7 +759,7 @@ signatureName,
 decorated.decoded,
 decorated.spell.atk,
 decorated.spell.def,
-decorated.spell.spe,
+decorated.spell.spc,
 decorated.spell.class,
 createdAt()
 ).run();
@@ -1070,7 +1070,7 @@ return combo.map(e=>{
 let g=GESTURES[e];
 
 
-return `${e} ${g.name}: +${g.atk} ATK +${g.def} DEF +${g.spe} SPE`;
+return `${e} ${g.name}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
 
 });
 
