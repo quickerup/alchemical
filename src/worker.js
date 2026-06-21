@@ -120,7 +120,19 @@ commands:[
 "Replay a completed arena battle",
 
 "/butler",
-"Inspect the evolving AI Butler opponent"
+"Inspect the evolving AI Butler opponent",
+
+"/player/create?name=shinobi",
+"Create a persistent player profile in D1",
+
+"/player?id=PLAYER-ID",
+"Load a player profile",
+
+"POST /jutsu/save",
+"Save a player's signature jutsu",
+
+"/stats?id=PLAYER-ID",
+"View player progression and signature jutsu"
 
 ]
 
@@ -592,6 +604,246 @@ return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toStr
 
 
 
+function requireDb(env){
+
+if(!env?.DB)
+return {error:"D1 database binding DB is not configured",status:503};
+
+return null;
+
+}
+
+
+
+function createdAt(){
+
+return Date.now();
+
+}
+
+
+
+async function createPlayer(request,env){
+
+const dbError=requireDb(env);
+if(dbError)
+return json({error:dbError.error},dbError.status);
+
+const url=new URL(request.url);
+let body={};
+
+if(request.method==="POST"){
+try{
+body=await request.json();
+}catch{
+body={};
+}
+}
+
+const username=(body.username || body.name || url.searchParams.get("username") || url.searchParams.get("name") || "").trim();
+
+if(!username)
+return json({error:"Missing player name"},400);
+
+const id=crypto.randomUUID();
+
+try{
+await env.DB.prepare(`
+INSERT INTO players (id, username, created_at)
+VALUES (?, ?, ?)
+`).bind(id,username,createdAt()).run();
+}catch(error){
+return json({error:"Player could not be created",detail:error.message},409);
+}
+
+return json({
+status:"created",
+playerId:id,
+username
+},201);
+
+}
+
+
+
+async function getPlayer(request,env){
+
+const dbError=requireDb(env);
+if(dbError)
+return json({error:dbError.error},dbError.status);
+
+const playerId=new URL(request.url).searchParams.get("id");
+
+if(!playerId)
+return json({error:"Missing player id"},400);
+
+const player=await env.DB.prepare(`
+SELECT * FROM players WHERE id = ?
+`).bind(playerId).first();
+
+if(!player)
+return json({error:"Player not found"},404);
+
+return json({player});
+
+}
+
+
+
+async function saveSignature(request,env){
+
+const dbError=requireDb(env);
+if(dbError)
+return json({error:dbError.error},dbError.status);
+
+if(request.method!=="POST")
+return json({error:"Use POST /jutsu/save with JSON body"},405);
+
+let body={};
+try{
+body=await request.json();
+}catch{
+return json({error:"Invalid JSON body"},400);
+}
+
+const playerId=body.playerId;
+const signatureName=(body.name || "").trim();
+const parsed=parseTechnique(body.combo);
+
+if(!playerId)
+return json({error:"Missing playerId"},400);
+
+if(!signatureName)
+return json({error:"Missing signature jutsu name"},400);
+
+if(parsed.error)
+return json({error:parsed.error},parsed.status);
+
+const player=await env.DB.prepare(`
+SELECT id FROM players WHERE id = ?
+`).bind(playerId).first();
+
+if(!player)
+return json({error:"Player not found"},404);
+
+const decorated=await decorateTechnique(parsed);
+const id=crypto.randomUUID();
+
+await env.DB.prepare(`
+INSERT INTO signature_jutsu
+(id, player_id, name, combo, atk, def, spe, class, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).bind(
+id,
+playerId,
+signatureName,
+decorated.decoded,
+decorated.spell.atk,
+decorated.spell.def,
+decorated.spell.spe,
+decorated.spell.class,
+createdAt()
+).run();
+
+return json({
+status:"signature_created",
+jutsu:{
+id,
+name:signatureName,
+combo:decorated.decoded,
+techniqueId:decorated.id,
+generatedName:decorated.name,
+stats:decorated.spell
+}
+},201);
+
+}
+
+
+
+async function getStats(request,env){
+
+const dbError=requireDb(env);
+if(dbError)
+return json({error:dbError.error},dbError.status);
+
+const playerId=new URL(request.url).searchParams.get("id");
+
+if(!playerId)
+return json({error:"Missing player id"},400);
+
+const player=await env.DB.prepare(`
+SELECT * FROM players WHERE id = ?
+`).bind(playerId).first();
+
+if(!player)
+return json({error:"Player not found"},404);
+
+const jutsu=await env.DB.prepare(`
+SELECT * FROM signature_jutsu WHERE player_id = ? ORDER BY created_at DESC
+`).bind(playerId).all();
+
+const battles=await env.DB.prepare(`
+SELECT * FROM battles
+WHERE player_a = ? OR player_b = ?
+ORDER BY created_at DESC
+LIMIT 25
+`).bind(playerId,playerId).all();
+
+return json({
+player,
+signature_jutsu:jutsu.results,
+battles:battles.results
+});
+
+}
+
+
+
+async function persistDuelResult(env,{playerA,playerB,comboA,comboB,replay}){
+
+if(!env?.DB || !playerA || !playerB)
+return;
+
+const winnerId=replay.winner==="Player 1" ? playerA : replay.winner==="Player 2" ? playerB : "Draw";
+const timestamp=createdAt();
+
+await env.DB.batch([
+env.DB.prepare(`
+INSERT INTO battles (id, player_a, player_b, combo_a, combo_b, winner, log, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`).bind(replay.match.id,playerA,playerB,comboA,comboB,winnerId,JSON.stringify(replay),timestamp),
+env.DB.prepare(`
+UPDATE players
+SET wins = wins + ?, losses = losses + ?, draws = draws + ?, points = points + ?, xp = xp + ?
+WHERE id = ?
+`).bind(replay.winner==="Player 1" ? 1 : 0,replay.winner==="Player 2" ? 1 : 0,replay.winner==="Draw" ? 1 : 0,replay.winner==="Player 1" ? 100 : replay.winner==="Draw" ? 10 : -50,replay.winner==="Player 1" ? 25 : 5,playerA),
+env.DB.prepare(`
+UPDATE players
+SET wins = wins + ?, losses = losses + ?, draws = draws + ?, points = points + ?, xp = xp + ?
+WHERE id = ?
+`).bind(replay.winner==="Player 2" ? 1 : 0,replay.winner==="Player 1" ? 1 : 0,replay.winner==="Draw" ? 1 : 0,replay.winner==="Player 2" ? 100 : replay.winner==="Draw" ? 10 : -50,replay.winner==="Player 2" ? 25 : 5,playerB)
+]);
+
+if(winnerId!=="Draw"){
+await env.DB.prepare(`
+UPDATE signature_jutsu
+SET usage_count = usage_count + 1,
+wins = wins + CASE WHEN player_id = ? THEN 1 ELSE 0 END
+WHERE player_id IN (?, ?) AND combo IN (?, ?)
+`).bind(winnerId,playerA,playerB,comboA,comboB).run();
+}else{
+await env.DB.prepare(`
+UPDATE signature_jutsu
+SET usage_count = usage_count + 1
+WHERE player_id IN (?, ?) AND combo IN (?, ?)
+`).bind(playerA,playerB,comboA,comboB).run();
+}
+
+}
+
+
+
 function dominantType(spell){
 
 return spell.class.toLowerCase();
@@ -844,6 +1096,26 @@ const path=url.pathname;
 
 
 
+if(path==="/player/create")
+return createPlayer(request,env);
+
+
+
+if(path==="/player")
+return getPlayer(request,env);
+
+
+
+if(path==="/jutsu/save")
+return saveSignature(request,env);
+
+
+
+if(path==="/stats")
+return getStats(request,env);
+
+
+
 if(path==="/help")
 return json(CODEX.help);
 
@@ -972,6 +1244,16 @@ return json({error:`Opponent: ${opponent.error}`},opponent.status);
 
 const decoratedOpponent=await decorateTechnique(opponent);
 const replay=await simulateBattle(parsed,decoratedOpponent,url.searchParams.get("matchId"));
+const playerA=url.searchParams.get("playerA") || url.searchParams.get("player");
+const playerB=url.searchParams.get("playerB") || url.searchParams.get("opponentPlayer");
+
+await persistDuelResult(env,{
+playerA,
+playerB,
+comboA:decoded,
+comboB:decoratedOpponent.decoded,
+replay
+});
 
 return json({
 status:"success",
