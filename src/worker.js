@@ -1,3 +1,4 @@
+import { handleTelegramWebhook } from "./telegram-bot.js";
 const FINISHER = "🙏🏻";
 const MAX_HAND_SIGNS = 5;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
@@ -1136,6 +1137,11 @@ const url=new URL(request.url);
 
 
 const path=url.pathname;
+
+
+
+if(path==="/telegram/webhook")
+return handleTelegramWebhook(request,env);
 
 
 
