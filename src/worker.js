@@ -2,6 +2,9 @@ import { handleTelegramWebhook } from "./telegram-bot.js";
 const FINISHER = "🙏🏻";
 const MAX_HAND_SIGNS = 5;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
+const FORCE_ADVANTAGE_BONUS = 18;
+const FORCE_ADVANTAGE_SCALE = 0.08;
+const LONG_COMBO_RISK_STEP = 5;
 
 const MEMORY_ARENA = {
 queue:[],
@@ -170,7 +173,9 @@ Mystic > Barrier
 
 Barrier > Kinetic
 
-Repeat matching forces for synergy bonuses.
+Repeat matching forces for synergy bonuses, but repeating the exact same hand sign adds a repetition penalty.
+Longer combos add complexity, cost, and risk; each hand sign after the third adds extra risk so max-length combos are not always safest.
+Risk lowers duel score and can create a small backlash in close exchanges.
 Last hand sign before 🙏🏻 can unlock a finisher.
 
 Duel simulations are deterministic: the same combos and match ID always replay the same result.
@@ -372,10 +377,11 @@ const baseTotal=atk+def+spc;
 const uniqueSigns=new Set(combo).size;
 const repetitionPenalty=(combo.length-uniqueSigns)*4;
 const diversityBonus=uniqueSigns*2;
-const complexityBonus=Math.max(0,combo.length-2)*3;
+const complexityBonus=Math.max(0,combo.length-2)*2;
+const longComboRisk=Math.max(0,combo.length-3)*LONG_COMBO_RISK_STEP;
 const power=Math.max(1,baseTotal + diversityBonus + complexityBonus - repetitionPenalty);
-const cost=Math.ceil(power*0.38 + combo.length*3);
-const risk=Math.max(1,Math.floor((atk*0.24 + spc*0.18) - (def*0.12) + repetitionPenalty));
+const cost=Math.ceil(power*0.42 + combo.length*4);
+const risk=Math.max(1,Math.floor((atk*0.24 + spc*0.18) - (def*0.12) + repetitionPenalty + longComboRisk));
 
 return {
 
@@ -390,7 +396,8 @@ risk,
 modifiers:{
 diversityBonus,
 complexityBonus,
-repetitionPenalty
+repetitionPenalty,
+longComboRisk
 },
 
 types:[...new Set(types)]
@@ -445,8 +452,8 @@ if(finisher.spc) boosted.spc+=finisher.spc;
 
 boosted.finisher=finisher.name;
 boosted.power=boosted.atk+boosted.def+boosted.spc + (boosted.modifiers?.diversityBonus ?? 0) + (boosted.modifiers?.complexityBonus ?? 0) - (boosted.modifiers?.repetitionPenalty ?? 0);
-boosted.cost=Math.ceil(boosted.power*0.38);
-boosted.risk=Math.max(1,Math.floor((boosted.atk*0.24 + boosted.spc*0.18) - (boosted.def*0.12) + (boosted.modifiers?.repetitionPenalty ?? 0)));
+boosted.cost=Math.ceil(boosted.power*0.42);
+boosted.risk=Math.max(1,Math.floor((boosted.atk*0.24 + boosted.spc*0.18) - (boosted.def*0.12) + (boosted.modifiers?.repetitionPenalty ?? 0) + (boosted.modifiers?.longComboRisk ?? 0)));
 
 return boosted;
 
@@ -464,9 +471,9 @@ if(
 (attacker.class==="Mystic" && defender.class==="Barrier") ||
 (attacker.class==="Barrier" && defender.class==="Kinetic")
 )
-return 8;
+return FORCE_ADVANTAGE_BONUS + Math.round(defender.power*FORCE_ADVANTAGE_SCALE);
 
-return -8;
+return -(FORCE_ADVANTAGE_BONUS + Math.round(attacker.power*FORCE_ADVANTAGE_SCALE));
 
 }
 
@@ -475,7 +482,7 @@ return -8;
 function scoreDuelist(spell,opponent,seed=0){
 
 const deterministicPressure=(seed-0.5)*6;
-return spell.atk*1.15 + spell.def + spell.spc*0.9 + forceAdvantage(spell,opponent) - spell.cost*0.08 - spell.risk*0.12 + deterministicPressure;
+return spell.atk*1.05 + spell.def*0.95 + spell.spc*0.85 + forceAdvantage(spell,opponent) - spell.cost*0.12 - spell.risk*0.35 + deterministicPressure;
 
 }
 
@@ -529,8 +536,10 @@ const seed=await sha256Hex(`${player.decoded}|${opponent.decoded}|${matchId}`);
 
 const playerScore=scoreDuelist(player.spell,opponent.spell,seedNumber(seed,0));
 const opponentScore=scoreDuelist(opponent.spell,player.spell,seedNumber(seed,1));
-const playerDamage=Math.max(0,Math.round(playerScore - opponent.spell.def*0.35 + seedNumber(seed,2)*5));
-const opponentDamage=Math.max(0,Math.round(opponentScore - player.spell.def*0.35 + seedNumber(seed,3)*5));
+const playerRiskBacklash=Math.floor(player.spell.risk*0.18);
+const opponentRiskBacklash=Math.floor(opponent.spell.risk*0.18);
+const playerDamage=Math.max(0,Math.round(playerScore - opponent.spell.def*0.35 - playerRiskBacklash + seedNumber(seed,2)*5));
+const opponentDamage=Math.max(0,Math.round(opponentScore - player.spell.def*0.35 - opponentRiskBacklash + seedNumber(seed,3)*5));
 
 let winner="Draw";
 if(playerDamage>opponentDamage) winner="Player 1";
@@ -550,8 +559,10 @@ analysis:[
 `Player 2 created a ${opponent.spell.types.join("-")} ${opponent.spell.class} technique`,
 forceAnalysis(player.spell,opponent.spell),
 forceAnalysis(opponent.spell,player.spell),
-`Player 1 cost ${player.spell.cost} with risk ${player.spell.risk}`,
-`Player 2 cost ${opponent.spell.cost} with risk ${opponent.spell.risk}`
+`Player 1 cost ${player.spell.cost} with risk ${player.spell.risk} (-${Number((player.spell.risk*0.35).toFixed(2))} score, -${playerRiskBacklash} backlash)`,
+`Player 2 cost ${opponent.spell.cost} with risk ${opponent.spell.risk} (-${Number((opponent.spell.risk*0.35).toFixed(2))} score, -${opponentRiskBacklash} backlash)`,
+`Player 1 repetition penalty ${player.spell.modifiers?.repetitionPenalty ?? 0}; long combo risk ${player.spell.modifiers?.longComboRisk ?? 0}`,
+`Player 2 repetition penalty ${opponent.spell.modifiers?.repetitionPenalty ?? 0}; long combo risk ${opponent.spell.modifiers?.longComboRisk ?? 0}`
 ],
 rounds:[
 {attacker:"Player 1",damage:playerDamage,score:Number(playerScore.toFixed(2))},
@@ -564,6 +575,111 @@ winner
 
 
 
+
+
+function mergeAiButler(stored){
+
+if(!stored)
+return {...MEMORY_ARENA.aiButler,history:[...MEMORY_ARENA.aiButler.history]};
+
+let history=[];
+try{
+history=stored.history_json ? JSON.parse(stored.history_json) : [];
+}catch{
+history=[];
+}
+
+return {
+id:stored.id || MEMORY_ARENA.aiButler.id,
+name:stored.name || MEMORY_ARENA.aiButler.name,
+history,
+winRate:Number(stored.win_rate ?? MEMORY_ARENA.aiButler.winRate),
+preferredStyle:stored.style || MEMORY_ARENA.aiButler.preferredStyle,
+adaptationLevel:Number(stored.adaptation ?? MEMORY_ARENA.aiButler.adaptationLevel)
+};
+
+}
+
+
+
+async function loadAiButlerFromD1(env){
+
+if(!env?.DB)
+return null;
+
+try{
+const stored=await env.DB.prepare(`
+SELECT id, name, style, win_rate, adaptation, history_json
+FROM ai_butlers
+WHERE id = ?
+`).bind(MEMORY_ARENA.aiButler.id).first();
+
+return mergeAiButler(stored);
+}catch{
+return null;
+}
+
+}
+
+
+
+async function persistAiButlerToD1(env,aiButler,lastCombo){
+
+if(!env?.DB || !aiButler)
+return;
+
+try{
+await env.DB.prepare(`
+INSERT INTO ai_butlers (id, name, style, win_rate, adaptation, last_combo, history_json, updated_at, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+name = excluded.name,
+style = excluded.style,
+win_rate = excluded.win_rate,
+adaptation = excluded.adaptation,
+last_combo = excluded.last_combo,
+history_json = excluded.history_json,
+updated_at = excluded.updated_at
+`).bind(
+aiButler.id,
+aiButler.name,
+aiButler.preferredStyle,
+aiButler.winRate,
+aiButler.adaptationLevel,
+lastCombo || aiComboForButler(aiButler),
+JSON.stringify(aiButler.history || []),
+createdAt(),
+createdAt()
+).run();
+}catch{
+// Older deployments without the ai_butlers migration should keep working via KV/in-memory arena state.
+}
+
+}
+
+
+
+function updateAiButlerAfterBattle(aiButler,{battleId,winnerId,aiOpponent,completedAt}){
+
+const updated={
+...aiButler,
+history:[...(aiButler.history || [])]
+};
+
+const aiWon=winnerId===updated.id;
+updated.history.unshift({battleId,winner:winnerId,at:completedAt});
+updated.history=updated.history.slice(0,25);
+const wins=updated.history.filter(h=>h.winner===updated.id).length;
+updated.winRate=Number((wins/updated.history.length).toFixed(2));
+updated.adaptationLevel=Number(Math.min(1,updated.adaptationLevel+(aiWon ? 0.01 : 0.05)).toFixed(2));
+if(!aiWon && aiOpponent?.spell?.class)
+updated.preferredStyle=aiOpponent.spell.class;
+
+return updated;
+
+}
+
+
 async function loadArena(env){
 
 if(env?.ARENA_KV){
@@ -571,6 +687,10 @@ const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
 if(stored)
 return stored;
 }
+
+const aiButler=await loadAiButlerFromD1(env);
+if(aiButler)
+MEMORY_ARENA.aiButler=aiButler;
 
 return MEMORY_ARENA;
 
@@ -582,6 +702,8 @@ async function saveArena(env,arena){
 
 if(env?.ARENA_KV)
 await env.ARENA_KV.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
+
+await persistAiButlerToD1(env,arena.aiButler);
 
 MEMORY_ARENA.queue=arena.queue;
 MEMORY_ARENA.activeBattles=arena.activeBattles;
@@ -991,14 +1113,13 @@ arena.history.unshift(battle);
 recordLeaderboard(arena,first.playerId,second.playerId,winnerId==="Draw");
 
 if(first.isAi || second.isAi){
-const aiWon=winnerId===arena.aiButler.id;
-arena.aiButler.history.unshift({battleId,winner:winnerId,at:battle.completedAt});
-arena.aiButler.history=arena.aiButler.history.slice(0,25);
-const wins=arena.aiButler.history.filter(h=>h.winner===arena.aiButler.id).length;
-arena.aiButler.winRate=Number((wins/arena.aiButler.history.length).toFixed(2));
-arena.aiButler.adaptationLevel=Number(Math.min(1,arena.aiButler.adaptationLevel+(aiWon ? 0.01 : 0.05)).toFixed(2));
-if(!aiWon)
-arena.aiButler.preferredStyle=first.isAi ? second.spell.class : first.spell.class;
+const aiOpponent=first.isAi ? second : first;
+arena.aiButler=updateAiButlerAfterBattle(arena.aiButler,{
+battleId,
+winnerId,
+aiOpponent,
+completedAt:battle.completedAt
+});
 }
 
 matched++;
@@ -1014,7 +1135,15 @@ function parseTechnique(input){
 if(!input)
 return {error:"Missing combo",status:400};
 
-const decoded=decodeURIComponent(input);
+let decoded;
+try{
+decoded=decodeURIComponent(input);
+}catch{
+return {
+error:"Combo could not be decoded. Please URL-encode emoji combos, for example /lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB",
+status:400
+};
+}
 
 if(!decoded.endsWith(FINISHER))
 return {error:"Every technique must end with 🙏🏻",status:400};
@@ -1306,6 +1435,19 @@ comboA:decoded,
 comboB:decoratedOpponent.decoded,
 replay
 });
+
+if(playerA===MEMORY_ARENA.aiButler.id || playerB===MEMORY_ARENA.aiButler.id){
+const arena=await loadArena(env);
+const winnerId=replay.winner==="Player 1" ? playerA : replay.winner==="Player 2" ? playerB : "Draw";
+const aiOpponent=playerA===MEMORY_ARENA.aiButler.id ? decoratedOpponent : parsed;
+arena.aiButler=updateAiButlerAfterBattle(arena.aiButler,{
+battleId:replay.match.id,
+winnerId,
+aiOpponent,
+completedAt:new Date().toISOString()
+});
+await saveArena(env,arena);
+}
 
 return json({
 status:"success",
