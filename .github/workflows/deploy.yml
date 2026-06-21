@@ -1,4 +1,4 @@
-I'mname: Deploy to Cloudflare Workers
+name: Deploy to Cloudflare Workers
 
 on:
   push:
