@@ -103,56 +103,33 @@ help:{
 
 title:"Emoji Jutsu Commands",
 
+summary:"Every command returns JSON. Unknown paths return a clear not-a-command message with a curl example for /help.",
+
+usage:[
+"Pick 1-5 hand signs.",
+"End every combo with 🙏🏻.",
+"URL encode emoji combos when you paste commands into a shell.",
+"Use GET commands for quick lookups and POST commands when sending JSON bodies."
+],
+
 commands:[
-
-"/lookup?combo=👊🏻🖖🏻🙏🏻",
-"Cast a technique",
-
-"/analyze?combo=👊🏻🖖🏻🙏🏻",
-"Explain a technique",
-
-"/gestures",
-"View hand signs",
-
-"/rules",
-"Learn combat",
-
-"/duel?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻🤟🏻🙏🏻",
-"Compare two techniques in combat",
-
-"/simulate?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻",
-"Replay a deterministic duel",
-
-"/replay?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻&matchId=MATCH-123",
-"Verify a deterministic match",
-
-"/train",
-"Begin training",
-
-"POST /queue",
-"Submit a sealed technique into the asynchronous arena queue",
-
-"/arena",
-"View persistent arena queue, history, leaderboard and AI Butler state",
-
-"/battle/:id",
-"Replay a completed arena battle",
-
-"/butler",
-"Inspect the evolving AI Butler opponent",
-
-"/player/create?name=shinobi",
-"Create a persistent player profile in D1",
-
-"/player?id=PLAYER-ID",
-"Load a player profile",
-
-"POST /jutsu/save",
-"Save a player's signature jutsu",
-
-"/stats?id=PLAYER-ID",
-"View player progression and signature jutsu"
-
+{method:"GET",path:"/help",description:"Show this command guide with curl examples.",curl:"curl \"$BASE_URL/help\""},
+{method:"GET",path:"/lookup?combo=👊🏻🖖🏻🙏🏻",description:"Cast a sealed technique and receive its generated name, rank, stats and battle style.",curl:"curl \"$BASE_URL/lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
+{method:"GET",path:"/analyze?combo=👊🏻🖖🏻🙏🏻",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
+{method:"GET",path:"/gestures",description:"List every available hand sign and its ATK, DEF, SPC and force type.",curl:"curl \"$BASE_URL/gestures\""},
+{method:"GET",path:"/rules",description:"Read the deterministic combat rules, force triangle, finisher rules and replay guarantees.",curl:"curl \"$BASE_URL/rules\""},
+{method:"GET",path:"/duel?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻🤟🏻🙏🏻",description:"Compare two sealed techniques and return the winner, damage, scores and force analysis.",curl:"curl \"$BASE_URL/duel?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%A4%9F%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
+{method:"GET",path:"/simulate?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻",description:"Run a deterministic duel that can be replayed from the same inputs.",curl:"curl \"$BASE_URL/simulate?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%AB%90%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
+{method:"GET",path:"/replay?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻&matchId=MATCH-123",description:"Verify a previous deterministic match by passing the same combos and match id.",curl:"curl \"$BASE_URL/replay?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%AB%90%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&matchId=MATCH-123\""},
+{method:"GET",path:"/train",description:"Get a step-by-step starter lesson for building a combo.",curl:"curl \"$BASE_URL/train\""},
+{method:"POST",path:"/queue",description:"Submit a sealed technique into the asynchronous arena queue.",curl:"curl -X POST \"$BASE_URL/queue\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"shinobi\",\"combo\":\"👊🏻🖖🏻🙏🏻\",\"includeButler\":true}'"},
+{method:"GET",path:"/arena",description:"View persistent arena queue, history, leaderboard and AI Butler state.",curl:"curl \"$BASE_URL/arena\""},
+{method:"GET",path:"/battle/:id",description:"Replay a completed arena battle from history.",curl:"curl \"$BASE_URL/battle/BATTLE-ID\""},
+{method:"GET",path:"/butler",description:"Inspect the evolving AI Butler opponent and its next combo.",curl:"curl \"$BASE_URL/butler\""},
+{method:"POST",path:"/player/create",description:"Create a persistent D1 player profile.",curl:"curl -X POST \"$BASE_URL/player/create\" -H \"Content-Type: application/json\" -d '{\"name\":\"shinobi\"}'"},
+{method:"GET",path:"/player?id=PLAYER-ID",description:"Load a player profile.",curl:"curl \"$BASE_URL/player?id=PLAYER-ID\""},
+{method:"POST",path:"/jutsu/save",description:"Save a player's signature jutsu.",curl:"curl -X POST \"$BASE_URL/jutsu/save\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"PLAYER-ID\",\"name\":\"Astral Jab\",\"combo\":\"👊🏻🖖🏻🙏🏻\"}'"},
+{method:"GET",path:"/stats?id=PLAYER-ID",description:"View player progression, battle history and signature jutsu.",curl:"curl \"$BASE_URL/stats?id=PLAYER-ID\""}
 ]
 
 },
@@ -1080,11 +1057,55 @@ return `${e} ${g.name}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
 
 
 
+
+
+function requestBaseUrl(requestUrl){
+
+const url=new URL(requestUrl);
+return `${url.protocol}//${url.host}`;
+
+}
+
+
+
+function curlForRequest(requestUrl,method="GET"){
+
+const url=new URL(requestUrl);
+return method==="GET" ? `curl "${url.href}"` : `curl -X ${method} "${url.href}"`;
+
+}
+
+
+
+function withResponseHelp(data,status){
+
+const requestUrl=globalThis.__ALCHEMICAL_REQUEST_URL;
+
+if(!requestUrl || !data || typeof data!=="object" || Array.isArray(data))
+return data;
+
+if(data.curl && data.help && data.isSystemCommand!==undefined)
+return data;
+
+const method=globalThis.__ALCHEMICAL_REQUEST_METHOD || "GET";
+const baseUrl=requestBaseUrl(requestUrl);
+
+return {
+...data,
+curl:data.curl || curlForRequest(requestUrl,method),
+help:data.help || `Set BASE_URL="${baseUrl}" and run curl "${baseUrl}/help" to see every system command.`,
+isSystemCommand:data.isSystemCommand ?? status!==404
+};
+
+}
+
+
+
 function json(data,status=200){
 
 return new Response(
 
-JSON.stringify(data,null,2),
+JSON.stringify(withResponseHelp(data,status),null,2),
 
 {
 status,
@@ -1106,6 +1127,9 @@ export default {
 
 
 async fetch(request,env){
+
+globalThis.__ALCHEMICAL_REQUEST_URL=request.url;
+globalThis.__ALCHEMICAL_REQUEST_METHOD=request.method;
 
 
 const url=new URL(request.url);
@@ -1234,7 +1258,10 @@ path!=="/replay"
 )
 
 return json({
-error:"Unknown command"
+error:"That is not a command in the system.",
+requestedPath:path,
+availableCommandsUrl:"/help",
+suggestion:"Run the curl command below or open /help to see every supported command."
 },404);
 
 
