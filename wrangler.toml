@@ -7,3 +7,7 @@ compatibility_date = "2024-01-01"
 binding = "DB"
 database_name = "jutsumoji"
 database_id = "51604989-07b2-43bd-8bb6-68680d9622dc"
+
+[[kv_namespaces]]
+binding = "BOT_SESSIONS"
+id = "xxxxxxxx"
