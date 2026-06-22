@@ -5,6 +5,7 @@ const GESTURE_CACHE = {
   values: null,
   loadedAt: 0
 };
+const TELEGRAM_CONFIG_KEY = "telegram:config";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -17,19 +18,35 @@ function text(message, status = 200) {
   return new Response(message, { status });
 }
 
-function requireBotEnv(env) {
-  if (!env?.TELEGRAM_BOT_TOKEN) return "Missing TELEGRAM_BOT_TOKEN secret";
-  if (!env?.TELEGRAM_WEBHOOK_SECRET) return "Missing TELEGRAM_WEBHOOK_SECRET secret";
+async function getStoredTelegramConfig(env) {
+  if (!env?.BOT_SESSIONS) return {};
+  return (await env.BOT_SESSIONS.get(TELEGRAM_CONFIG_KEY, "json")) || {};
+}
+
+async function getBotConfig(env) {
+  const stored = await getStoredTelegramConfig(env);
+  return {
+    token: stored.token || env?.TELEGRAM_BOT_TOKEN || "",
+    webhookSecret: stored.webhookSecret || env?.TELEGRAM_WEBHOOK_SECRET || ""
+  };
+}
+
+async function requireBotEnv(env) {
+  const config = await getBotConfig(env);
+  if (!config.token) return "Missing Telegram bot token. Set it with POST /telegram/config.";
+  if (!config.webhookSecret) return "Missing Telegram webhook secret. Set it with POST /telegram/config.";
   if (!env?.BOT_SESSIONS) return "Missing BOT_SESSIONS KV binding";
   return null;
 }
 
-function verifyTelegramSecret(request, env) {
-  return request.headers.get("X-Telegram-Bot-Api-Secret-Token") === env.TELEGRAM_WEBHOOK_SECRET;
+async function verifyTelegramSecret(request, env) {
+  const config = await getBotConfig(env);
+  return request.headers.get("X-Telegram-Bot-Api-Secret-Token") === config.webhookSecret;
 }
 
 async function telegram(env, method, payload) {
-  const response = await fetch(`${TELEGRAM_API}/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+  const config = await getBotConfig(env);
+  const response = await fetch(`${TELEGRAM_API}/bot${config.token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -252,10 +269,49 @@ async function handleMessage(request, env, message) {
   return telegram(env, "sendMessage", { chat_id: chat.id, text: "Unknown command. Try /help." });
 }
 
+export async function handleTelegramConfig(request, env) {
+  if (!env?.BOT_SESSIONS) return json({ error: "Missing BOT_SESSIONS KV binding" }, 503);
+  if (request.method !== "POST") return text("Use POST", 405);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Send JSON with a token field" }, 400);
+  }
+
+  const token = (body.token || body.telegramBotToken || "").trim();
+  if (!token) return json({ error: "Missing token" }, 400);
+
+  const existing = await getStoredTelegramConfig(env);
+  const webhookSecret = (body.webhookSecret || existing.webhookSecret || crypto.randomUUID()).trim();
+  const config = { token, webhookSecret, updatedAt: new Date().toISOString() };
+  await env.BOT_SESSIONS.put(TELEGRAM_CONFIG_KEY, JSON.stringify(config));
+
+  const url = new URL(request.url);
+  const webhookUrl = body.webhookUrl || `${url.origin}/telegram/webhook`;
+  let webhook = null;
+  if (body.setWebhook !== false) {
+    webhook = await telegram(env, "setWebhook", {
+      url: webhookUrl,
+      secret_token: webhookSecret,
+      allowed_updates: ["message", "callback_query"]
+    });
+  }
+
+  return json({
+    ok: true,
+    webhookUrl,
+    webhookSecret,
+    webhook,
+    message: "Telegram bot token saved and webhook configured. The token is not returned."
+  });
+}
+
 export async function handleTelegramWebhook(request, env) {
-  const missing = requireBotEnv(env);
+  const missing = await requireBotEnv(env);
   if (missing) return json({ error: missing }, 503);
-  if (!verifyTelegramSecret(request, env)) return text("Unauthorized", 401);
+  if (!(await verifyTelegramSecret(request, env))) return text("Unauthorized", 401);
   if (request.method !== "POST") return text("Use POST", 405);
 
   let update;
