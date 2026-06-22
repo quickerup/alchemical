@@ -12,7 +12,9 @@ const DEFAULT_CAST_GESTURES = [
   "✊🏻", "👊🏻", "🫸🏻", "🫷🏻", "🤚🏻",
   "🖐🏻", "✋🏻", "🖖🏻", "🤟🏻", "🤞🏻",
   "✌🏻", "🤌🏻", "🫳🏻", "🫴🏻", "🫲🏻",
-  "🫱🏻", "👋🏻", "🫰🏻", "🤙🏻", "🤏🏻"
+  "🫱🏻", "👋🏻", "🫰🏻", "🤙🏻", "🤏🏻",
+  "👌🏻", "🫵🏻", "👉🏻", "👈🏻", "☝🏻",
+  "👆🏻", "👇🏻", "🖕🏻", "✍🏻", "🤳🏻"
 ];
 const HAND_SIGN_PATTERN = new RegExp(`^(?:${DEFAULT_CAST_GESTURES.map(escapeRegExp).join("|")}){1,5}(?:${escapeRegExp(FINISHER)})?$`, "u");
 
@@ -240,7 +242,7 @@ async function loadGestures(request) {
 }
 
 function castKeyboard(gestures, combo = []) {
-  const rows = gestures.slice(0, 30).reduce((acc, gesture, index) => {
+  const rows = gestures.reduce((acc, gesture, index) => {
     if (index % 5 === 0) acc.push([]);
     acc[acc.length - 1].push({ text: gesture, callback_data: `cast:add:${gesture}` });
     return acc;
@@ -295,7 +297,7 @@ async function handleCastCallback(request, env, callback) {
     const technique = lookup.data || {};
     const stats = technique.stats || {};
     const resultText = lookup.ok && technique.name && technique.rank && technique.stats
-      ? `Sealed: ${sealed}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}`
+      ? `Sealed: ${sealed} → ${technique.outcome || "✨"}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}`
       : `Sealed: ${sealed}\nTechnique lookup is temporarily unavailable. Try ${STATIC_BUTTONS.duel} or ${STATIC_BUTTONS.queue} in a moment.`;
 
     await telegram(env, "editMessageText", {
@@ -322,7 +324,7 @@ function formatTechniquePreview(combo, technique) {
   const stats = technique.stats || {};
   const effect = technique.battleStyle || technique.spell || `${stats.class || technique.class || "Unknown"} Technique`;
   return [
-    `Preview: ${combo}`,
+    `Preview: ${combo} → ${technique.outcome || "✨"}`,
     `${technique.name} (${technique.rank || "Unranked"})`,
     `Element/Type: ${stats.class || technique.class || "Unknown"}`,
     `Damage/Effect: Power ${stats.power ?? "?"}; ${effect}`,
@@ -372,7 +374,7 @@ async function handleLookupCallback(request, env, callback) {
   await saveSession(env, chatId, nextSession);
 
   await callWorkerJson(request, "/jutsu/save", { method: "POST", body: JSON.stringify({ playerId: session.playerId, name: lookup.data.name, combo: sealed }) });
-  await telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Sealed: ${sealed}\n${lookup.data.name} (${lookup.data.rank})\nSaved as your latest jutsu.` });
+  await telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Sealed: ${sealed} → ${lookup.data.outcome || "✨"}\n${lookup.data.name} (${lookup.data.rank})\nSaved as your latest jutsu.` });
   await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique saved and sealed." });
 }
 

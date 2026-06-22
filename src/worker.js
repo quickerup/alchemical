@@ -88,6 +88,27 @@ const GESTURES = {
 
 };
 
+const NON_HAND_OUTCOMES = [
+"🔥", "🛡️", "🔮", "⚡", "🌊", "🌪️", "🌋", "🪨", "🌙", "☀️",
+"⭐", "💫", "🌈", "❄️", "🌿", "🍄", "🐉", "🦊", "🐺", "🦅",
+"🐍", "🦂", "🕸️", "💎", "🧲", "🧪", "🪬", "🧿", "🕯️", "🗝️",
+"🧭", "⏳", "🌀", "💥", "☄️", "🌌", "🏔️", "🌧️", "🎭", "🎲"
+];
+
+function emojiSignature(value){
+return Array.from(value).reduce((total,char,index)=>total + char.codePointAt(0)*(index+1),0);
+}
+
+function outcomeForCast(cast){
+const signs=Array.isArray(cast) ? cast : [cast];
+const signature=signs.reduce((total,sign,index)=>total + emojiSignature(sign)*(index+1),0);
+return NON_HAND_OUTCOMES[signature % NON_HAND_OUTCOMES.length];
+}
+
+function outcomeMatrix(){
+return Object.fromEntries(Object.keys(GESTURES).map(gesture=>[gesture,outcomeForCast(gesture)]));
+}
+
 
 
 const FINISHERS={
@@ -532,7 +553,8 @@ const idHash=await sha256Hex(parsed.decoded);
 return {
 ...parsed,
 id:`JUTSU-${idHash.slice(0,5).toUpperCase()}`,
-name:describeTechnique(parsed.spell)
+name:describeTechnique(parsed.spell),
+outcome:outcomeForCast(parsed.combo)
 };
 
 }
@@ -1222,7 +1244,7 @@ return combo.map(e=>{
 let g=GESTURES[e];
 
 
-return `${e} ${g.name}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
+return `${e} ${g.name} → ${outcomeForCast(e)}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
 
 });
 
@@ -1479,7 +1501,11 @@ return json({
 
 count:Object.keys(GESTURES).length,
 
-gestures:GESTURES
+gestures:GESTURES,
+
+outcomes:outcomeMatrix(),
+
+outcomeLegend:NON_HAND_OUTCOMES
 
 });
 
@@ -1555,8 +1581,8 @@ await saveArena(env,arena);
 return json({
 status:"success",
 ...replay,
-combo:{id,name,technique:decoded,class:spell.class,rank:rank(spell),stats:spell},
-opponent:{id:decoratedOpponent.id,name:decoratedOpponent.name,technique:decoratedOpponent.decoded,class:decoratedOpponent.spell.class,rank:rank(decoratedOpponent.spell),stats:decoratedOpponent.spell},
+combo:{id,name,outcome:parsed.outcome,technique:decoded,class:spell.class,rank:rank(spell),stats:spell},
+opponent:{id:decoratedOpponent.id,name:decoratedOpponent.name,outcome:decoratedOpponent.outcome,technique:decoratedOpponent.decoded,class:decoratedOpponent.spell.class,rank:rank(decoratedOpponent.spell),stats:decoratedOpponent.spell},
 forceRule:"Kinetic > Mystic > Barrier > Kinetic"
 });
 
@@ -1575,6 +1601,10 @@ id,
 name,
 
 technique:decoded,
+
+outcome:parsed.outcome,
+
+outcomeMatrix:combo.map(gesture=>({gesture,outcome:outcomeForCast(gesture)})),
 
 breakdown:analyze(combo),
 
@@ -1600,6 +1630,8 @@ id,
 name,
 
 technique:decoded,
+
+outcome:parsed.outcome,
 
 spell:
 
