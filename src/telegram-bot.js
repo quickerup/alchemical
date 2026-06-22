@@ -67,9 +67,22 @@ async function requireBotEnv(env) {
   return null;
 }
 
+function constantTimeStringEqual(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  const maxLength = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+
+  for (let i = 0; i < maxLength; i += 1) {
+    diff |= (left.charCodeAt(i) || 0) ^ (right.charCodeAt(i) || 0);
+  }
+
+  return diff === 0;
+}
+
 async function verifyTelegramSecret(request, env) {
   const config = await getBotConfig(env);
-  return request.headers.get("X-Telegram-Bot-Api-Secret-Token") === config.webhookSecret;
+  return constantTimeStringEqual(request.headers.get("X-Telegram-Bot-Api-Secret-Token"), config.webhookSecret);
 }
 
 async function telegram(env, method, payload) {
