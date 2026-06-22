@@ -21,6 +21,17 @@ adaptationLevel:0.1
 }
 };
 
+function normalizeArena(arena){
+const base=arena && typeof arena==="object" ? arena : {};
+return {
+queue:Array.isArray(base.queue) ? base.queue : [],
+activeBattles:Array.isArray(base.activeBattles) ? base.activeBattles : [],
+history:Array.isArray(base.history) ? base.history : [],
+leaderboard:base.leaderboard && typeof base.leaderboard==="object" ? base.leaderboard : {},
+aiButler:mergeAiButler(base.aiButler)
+};
+}
+
 
 
 const GESTURES = {
@@ -585,7 +596,7 @@ return {...MEMORY_ARENA.aiButler,history:[...MEMORY_ARENA.aiButler.history]};
 
 let history=[];
 try{
-history=stored.history_json ? JSON.parse(stored.history_json) : [];
+history=stored.history_json ? JSON.parse(stored.history_json) : (Array.isArray(stored.history) ? stored.history : []);
 }catch{
 history=[];
 }
@@ -594,9 +605,9 @@ return {
 id:stored.id || MEMORY_ARENA.aiButler.id,
 name:stored.name || MEMORY_ARENA.aiButler.name,
 history,
-winRate:Number(stored.win_rate ?? MEMORY_ARENA.aiButler.winRate),
-preferredStyle:stored.style || MEMORY_ARENA.aiButler.preferredStyle,
-adaptationLevel:Number(stored.adaptation ?? MEMORY_ARENA.aiButler.adaptationLevel)
+winRate:Number(stored.win_rate ?? stored.winRate ?? MEMORY_ARENA.aiButler.winRate),
+preferredStyle:stored.style || stored.preferredStyle || MEMORY_ARENA.aiButler.preferredStyle,
+adaptationLevel:Number(stored.adaptation ?? stored.adaptationLevel ?? MEMORY_ARENA.aiButler.adaptationLevel)
 };
 
 }
@@ -686,14 +697,14 @@ async function loadArena(env){
 if(env?.ARENA_KV){
 const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
 if(stored)
-return stored;
+return normalizeArena(stored);
 }
 
 const aiButler=await loadAiButlerFromD1(env);
 if(aiButler)
 MEMORY_ARENA.aiButler=aiButler;
 
-return MEMORY_ARENA;
+return normalizeArena(MEMORY_ARENA);
 
 }
 
@@ -1052,6 +1063,10 @@ return "🖖🏻🤞🏻🤟🏻🙏🏻";
 
 async function createQueueEntry({combo,playerId,riskQueue=false,isAi=false}){
 
+const safePlayerId=String(playerId || (isAi ? "AI-BUTLER-1" : "anonymous")).trim();
+if(!safePlayerId)
+return {error:"Missing playerId",status:400};
+
 let parsed=parseTechnique(combo);
 if(parsed.error)
 return {error:parsed.error,status:parsed.status};
@@ -1060,7 +1075,7 @@ parsed=await decorateTechnique(parsed);
 
 return {
 id:nowId("QUEUE"),
-playerId:playerId || (isAi ? "AI-BUTLER-1" : "anonymous"),
+playerId:safePlayerId,
 combo:parsed.decoded,
 techniqueId:parsed.id,
 name:parsed.name,
@@ -1074,6 +1089,35 @@ createdAt:new Date().toISOString()
 }
 
 
+
+
+async function persistQueueEntry(env,entry){
+
+if(!env?.DB || !entry)
+return;
+
+try{
+await env.DB.prepare(`
+INSERT INTO matchmaking_queue
+(id, player_id, combo, technique_id, name, spell_json, status, risk_queue, is_ai, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).bind(
+entry.id,
+entry.playerId,
+entry.combo,
+entry.techniqueId,
+entry.name,
+JSON.stringify(entry.spell),
+entry.status,
+entry.riskQueue ? 1 : 0,
+entry.isAi ? 1 : 0,
+createdAt()
+).run();
+}catch(error){
+console.warn("matchmaking_queue persistence skipped",error.message);
+}
+
+}
 
 async function resolveArena(arena){
 
@@ -1401,17 +1445,23 @@ body={};
 }
 
 const combo=body.combo || url.searchParams.get("combo");
-const playerId=body.playerId || url.searchParams.get("player") || "anonymous";
+const playerId=String(body.playerId || url.searchParams.get("player") || "anonymous").trim();
 const riskQueue=Boolean(body.riskQueue || url.searchParams.get("riskQueue"));
 const entry=await createQueueEntry({combo,playerId,riskQueue});
 
 if(entry.error)
 return json({error:entry.error},entry.status);
 
+await persistQueueEntry(env,entry);
 arena.queue.push(entry);
 
-if(body.includeButler || url.searchParams.get("butler")==="true")
-arena.queue.push(await createQueueEntry({combo:aiComboForButler(arena.aiButler),playerId:arena.aiButler.id,isAi:true}));
+if(body.includeButler || url.searchParams.get("butler")==="true"){
+const aiEntry=await createQueueEntry({combo:aiComboForButler(arena.aiButler),playerId:arena.aiButler.id,isAi:true});
+if(aiEntry.error)
+return json({error:aiEntry.error},aiEntry.status);
+await persistQueueEntry(env,aiEntry);
+arena.queue.push(aiEntry);
+}
 
 const resolved=await resolveArena(arena);
 await saveArena(env,arena);
@@ -1554,6 +1604,16 @@ technique:decoded,
 spell:
 
 `${spell.class} Technique`,
+
+element:spell.class,
+
+type:spell.class,
+
+damage:spell.power,
+
+effect:`Power ${spell.power} / Risk ${spell.risk}`,
+
+chakraCost:spell.cost,
 
 rank:rank(spell),
 
