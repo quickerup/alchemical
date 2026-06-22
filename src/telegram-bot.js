@@ -65,6 +65,25 @@ function workerUrl(request, path) {
   return `${url.origin}${path}`;
 }
 
+async function parseResponseBody(response) {
+  const contentType = response.headers.get("Content-Type") || "";
+  const textBody = await response.text();
+
+  if (contentType.includes("application/json")) {
+    try {
+      return textBody ? JSON.parse(textBody) : {};
+    } catch {
+      return { error: "Worker returned malformed JSON", detail: textBody };
+    }
+  }
+
+  try {
+    return textBody ? JSON.parse(textBody) : {};
+  } catch {
+    return { error: textBody || `HTTP ${response.status} ${response.statusText}` };
+  }
+}
+
 async function callWorkerJson(request, path, init = {}) {
   const response = await fetch(workerUrl(request, path), {
     ...init,
@@ -73,7 +92,7 @@ async function callWorkerJson(request, path, init = {}) {
       ...(init.headers || {})
     }
   });
-  const data = await response.json();
+  const data = await parseResponseBody(response);
   return { ok: response.ok, status: response.status, data };
 }
 
@@ -109,19 +128,39 @@ function commandList(playerId) {
   ].filter(Boolean).join("\n");
 }
 
+function createdAt() {
+  return Date.now();
+}
+
+async function createTelegramPlayer(env, chat) {
+  if (!env?.DB) throw new Error("D1 database binding DB is not configured");
+
+  const baseName = (chat.username || chat.first_name || `telegram-${chat.id}`).trim();
+  const usernames = [baseName, `${baseName}-${chat.id}`];
+  let lastError = null;
+
+  for (const username of usernames) {
+    const id = crypto.randomUUID();
+    try {
+      await env.DB.prepare(`
+INSERT INTO players (id, username, created_at)
+VALUES (?, ?, ?)
+`).bind(id, username, createdAt()).run();
+      return { playerId: id, username };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(`Player could not be created: ${lastError?.message || "unknown database error"}`);
+}
+
 async function ensurePlayer(request, env, chat) {
   const session = await getSession(env, chat.id);
   if (session.playerId) return session;
 
-  const name = chat.username || chat.first_name || `telegram-${chat.id}`;
-  const created = await callWorkerJson(request, "/player/create", {
-    method: "POST",
-    body: JSON.stringify({ username: name })
-  });
-
-  if (!created.ok) throw new Error(created.data?.error || "Could not create player");
-
-  const next = { ...session, playerId: created.data.playerId, username: created.data.username };
+  const created = await createTelegramPlayer(env, chat);
+  const next = { ...session, playerId: created.playerId, username: created.username };
   await saveSession(env, chat.id, next);
   return next;
 }
