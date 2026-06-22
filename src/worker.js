@@ -168,7 +168,8 @@ usage:[
 "Pick 1-5 hand signs.",
 "End every combo with 🙏🏻.",
 "URL encode emoji combos when you paste commands into a shell.",
-"Use GET commands for quick lookups and POST commands when sending JSON bodies."
+"Use GET commands for quick lookups and POST commands when sending JSON bodies.",
+"Admin config endpoints are locked until ADMIN_TOKEN or CONFIG_ADMIN_TOKEN is set with wrangler secret put; send that value as Bearer or X-Admin-Token."
 ],
 
 commands:[
@@ -185,9 +186,9 @@ commands:[
 {method:"GET",path:"/arena",description:"View persistent arena queue, history, leaderboard and AI Butler state.",curl:"curl \"$BASE_URL/arena\""},
 {method:"GET",path:"/battle/:id",description:"Replay a completed arena battle from history.",curl:"curl \"$BASE_URL/battle/BATTLE-ID\""},
 {method:"GET",path:"/butler",description:"Inspect the evolving AI Butler opponent and its next combo.",curl:"curl \"$BASE_URL/butler\""},
-{method:"POST",path:"/telegram/config",description:"Save the Telegram bot token in KV and configure the Telegram webhook so the bot can receive updates.",curl:"curl -X POST \"$BASE_URL/telegram/config\" -H \"Content-Type: application/json\" -d '{\"token\":\"123456:ABC...\"}'"},
-{method:"POST",path:"/ai/config",description:"Save the Cloudflare AI API token, account ID, model, and chronicle system prompt in KV for the AI model feature.",curl:"curl -X POST \"$BASE_URL/ai/config\" -H \"Content-Type: application/json\" -d '{\"token\":\"CF_API_TOKEN\",\"accountId\":\"CF_ACCOUNT_ID\",\"model\":\"@cf/meta/llama-3.1-8b-instruct\"}'"},
-{method:"GET",path:"/ai/config",description:"Inspect the configured Cloudflare AI account and model without returning the token.",curl:"curl \"$BASE_URL/ai/config\""},
+{method:"POST",path:"/telegram/config",description:"Save the Telegram bot token in KV and configure the Telegram webhook so the bot can receive updates. Requires ADMIN_TOKEN or CONFIG_ADMIN_TOKEN.",curl:"curl -X POST \"$BASE_URL/telegram/config\" -H \"Content-Type: application/json\" -H \"X-Admin-Token: $ADMIN_TOKEN\" -d '{\"token\":\"123456:ABC...\"}'"},
+{method:"POST",path:"/ai/config",description:"Save the Cloudflare AI API token, account ID, model, and chronicle system prompt in KV for the AI model feature. Requires ADMIN_TOKEN or CONFIG_ADMIN_TOKEN.",curl:"curl -X POST \"$BASE_URL/ai/config\" -H \"Content-Type: application/json\" -H \"X-Admin-Token: $ADMIN_TOKEN\" -d '{\"token\":\"CF_API_TOKEN\",\"accountId\":\"CF_ACCOUNT_ID\",\"model\":\"@cf/meta/llama-3.1-8b-instruct\"}'"},
+{method:"GET",path:"/ai/config",description:"Inspect the configured Cloudflare AI account and model without returning the token. Requires ADMIN_TOKEN or CONFIG_ADMIN_TOKEN.",curl:"curl \"$BASE_URL/ai/config\" -H \"X-Admin-Token: $ADMIN_TOKEN\""},
 {method:"POST",path:"/ai/chronicle",description:"Send raw match JSON to Cloudflare AI and receive a dark anime battle chronicle using the configured model.",curl:"curl -X POST \"$BASE_URL/ai/chronicle\" -H \"Content-Type: application/json\" -d '{\"match\":{\"id\":\"MATCH-123\"},\"rounds\":[],\"winner\":\"Player 1\"}'"},
 {method:"POST",path:"/player/create",description:"Create a persistent D1 player profile.",curl:"curl -X POST \"$BASE_URL/player/create\" -H \"Content-Type: application/json\" -d '{\"name\":\"shinobi\"}'"},
 {method:"GET",path:"/player?id=PLAYER-ID",description:"Load a player profile.",curl:"curl \"$BASE_URL/player?id=PLAYER-ID\""},
@@ -1000,6 +1001,8 @@ battles:battles.results
 
 
 
+// Canonicalization is forward-looking: new duel records are saved trimmed and NFC-normalized.
+// Legacy rows with non-NFC combo text still need a data migration before they can match these values.
 function canonicalCombo(combo){
 return String(combo || "").normalize("NFC").trim();
 }
@@ -1635,6 +1638,8 @@ if(path==="/" || path==="/admin"){
 const token=configAuthToken(env);
 if(!token)
 return json({error:"Admin console disabled until ADMIN_TOKEN or CONFIG_ADMIN_TOKEN is configured."},503);
+// Query-string adminToken is intentionally kept only for opening the HTML console in a browser.
+// Prefer Bearer or X-Admin-Token for API calls because URLs can be stored in logs, history, and Referer headers.
 const supplied=url.searchParams.get("adminToken");
 if(supplied!==token && !isAuthorizedConfigRequest(request,env))
 return json({error:"Unauthorized admin console request. Add ?adminToken=... or send Bearer/X-Admin-Token."},401);
