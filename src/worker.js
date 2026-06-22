@@ -1,10 +1,13 @@
 import { handleTelegramConfig, handleTelegramWebhook } from "./telegram-bot.js";
+const APP_NAME = "emoji-alchemy-worker";
+const APP_VERSION = "1.1.0";
 const FINISHER = "🙏🏻";
 const MAX_HAND_SIGNS = 5;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
 const FORCE_ADVANTAGE_BONUS = 18;
 const FORCE_ADVANTAGE_SCALE = 0.08;
 const LONG_COMBO_RISK_STEP = 5;
+const AI_BUTLER_HISTORY_LIMIT = 100;
 
 const AI_CONFIG_KEY = "cloudflare-ai:config";
 const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
@@ -43,6 +46,21 @@ preferredStyle:"Mystic",
 adaptationLevel:0.1
 }
 };
+
+function getArenaPersistenceMode(env){
+
+if(env?.ARENA_KV)
+return {mode:"kv",durable:true,warning:null};
+
+return {
+mode:"memory",
+durable:false,
+warning:"ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted."
+};
+
+}
+
+
 
 function normalizeArena(arena){
 const base=arena && typeof arena==="object" ? arena : {};
@@ -209,6 +227,7 @@ usage:[
 commands:[
 {method:"GET",path:"/help",description:"Show this command guide with curl examples.",curl:"curl \"$BASE_URL/help\""},
 {method:"GET",path:"/changelog",description:"Show recent API and product changes.",curl:"curl \"$BASE_URL/changelog\""},
+{method:"GET",path:"/about",description:"Show service identity and current application version.",curl:"curl \"$BASE_URL/about\""},
 {method:"GET",path:"/lookup?combo=👊🏻🖖🏻🙏🏻",description:"Cast a sealed technique and receive its generated name, rank, stats and battle style.",curl:"curl \"$BASE_URL/lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/analyze?combo=👊🏻🖖🏻🙏🏻",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/gestures",description:"List every available hand sign and its ATK, DEF, SPC and force type.",curl:"curl \"$BASE_URL/gestures\""},
@@ -785,7 +804,7 @@ history:[...(aiButler.history || [])]
 
 const aiWon=winnerId===updated.id;
 updated.history.unshift({battleId,winner:winnerId,at:completedAt});
-updated.history=updated.history.slice(0,25);
+updated.history=updated.history.slice(0,AI_BUTLER_HISTORY_LIMIT);
 const wins=updated.history.filter(h=>h.winner===updated.id).length;
 updated.winRate=Number((wins/updated.history.length).toFixed(2));
 updated.adaptationLevel=Number(Math.min(1,updated.adaptationLevel+(aiWon ? 0.01 : 0.05)).toFixed(2));
@@ -798,6 +817,10 @@ return updated;
 
 
 async function loadArena(env){
+
+const persistence=getArenaPersistenceMode(env);
+if(!persistence.durable)
+console.warn(persistence.warning);
 
 if(env?.ARENA_KV){
 const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
@@ -1655,6 +1678,20 @@ headers:{
 
 
 
+export {
+AI_BUTLER_HISTORY_LIMIT,
+FORCE_ADVANTAGE_BONUS,
+FORCE_ADVANTAGE_SCALE,
+buildSpell,
+forceAdvantage,
+getArenaPersistenceMode,
+parseTechnique,
+scoreDuelist,
+updateAiButlerAfterBattle
+};
+
+
+
 export default {
 
 
@@ -1722,8 +1759,13 @@ return json(CODEX.help);
 
 
 
-if(path==="/changelog")
-return json(CHANGELOG);
+if(path==="/about")
+return json({
+name:APP_NAME,
+version:APP_VERSION,
+description:"Emoji Jutsu deterministic combat API",
+availableCommandsUrl:"/help"
+});
 
 
 
@@ -1742,6 +1784,7 @@ const arena=await loadArena(env);
 
 if(path==="/arena")
 return json({
+persistence:getArenaPersistenceMode(env),
 queue:arena.queue,
 activeBattles:arena.activeBattles,
 history:arena.history.slice(0,25),
@@ -1766,7 +1809,7 @@ if(request.method!=="POST" && request.method!=="GET")
 return json({error:"Use POST /queue to submit a technique or GET /queue to inspect waiting entries"},405);
 
 if(request.method==="GET")
-return json({queue:arena.queue});
+return json({persistence:getArenaPersistenceMode(env),queue:arena.queue});
 
 let body={};
 try{

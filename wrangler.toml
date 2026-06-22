@@ -11,9 +11,8 @@ database_name = "jutsumoji"
 database_id = "51604989-07b2-43bd-8bb6-68680d9622dc"
 
 [[kv_namespaces]]
-binding = "KV"
-id = "bcdd232eae7543cb910b5e4523c88731"
-preview_id = "<ID_OF_PREVIEW_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
+binding = "KV_BINDING"
+id = "99f274107ed043dcbe27881f46ee17bc"
 
 [[kv_namespaces]]
 binding = "BOT_SESSIONS"
