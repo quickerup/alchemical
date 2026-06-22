@@ -162,6 +162,8 @@ title:"Emoji Jutsu Change Log",
 
 summary:"Recent product and API updates for the Emoji Jutsu worker.",
 
+source:"CHANGELOG.md",
+
 entries:[
 {
 version:"1.1.0",
