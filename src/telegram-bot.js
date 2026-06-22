@@ -238,6 +238,21 @@ function withStaticButtons(payload) {
   return { reply_markup: staticButtonKeyboard(), ...payload };
 }
 
+function mainMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: STATIC_BUTTONS.cast, callback_data: "nav:cast" }, { text: STATIC_BUTTONS.duel, callback_data: "nav:duel" }],
+      [{ text: STATIC_BUTTONS.queue, callback_data: "nav:queue" }, { text: STATIC_BUTTONS.arena, callback_data: "nav:arena" }],
+      [{ text: STATIC_BUTTONS.myjutsu, callback_data: "nav:myjutsu" }, { text: STATIC_BUTTONS.profile, callback_data: "nav:profile" }],
+      [{ text: STATIC_BUTTONS.butler, callback_data: "nav:butler" }, { text: STATIC_BUTTONS.help, callback_data: "nav:help" }]
+    ]
+  };
+}
+
+function withMainMenu(payload) {
+  return { ...payload, reply_markup: mainMenuKeyboard() };
+}
+
 function createdAt() {
   return Date.now();
 }
@@ -365,7 +380,8 @@ async function handleCastCallback(request, env, callback) {
     await telegram(env, "editMessageText", {
       chat_id: chatId,
       message_id: callback.message.message_id,
-      text: resultText
+      text: resultText,
+      reply_markup: mainMenuKeyboard()
     });
     await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique sealed." });
     return;
@@ -410,7 +426,10 @@ async function sendLookupPreview(request, env, chatId, session, rawCombo) {
   return telegram(env, "sendMessage", {
     chat_id: chatId,
     text: formatTechniquePreview(sealed, lookup.data),
-    reply_markup: { inline_keyboard: [[{ text: "Save/Seal", callback_data: `lookup:seal:${token}` }]] }
+    reply_markup: { inline_keyboard: [
+      [{ text: "Save/Seal", callback_data: `lookup:seal:${token}` }],
+      [{ text: STATIC_BUTTONS.duel, callback_data: `duel:use:${token}` }, { text: STATIC_BUTTONS.queue, callback_data: `queue:use:${token}` }]
+    ] }
   });
 }
 
@@ -442,12 +461,65 @@ async function handleLookupCallback(request, env, callback) {
   await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique saved and sealed." });
 }
 
+
+async function queueCombo(request, env, chatId, session, sealed) {
+  const validation = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
+  if (!validation.ok) {
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chatId, text: `Queue failed: your sealed technique is invalid (${validation.data.error || "unknown error"}). Seal a fresh combo first.` }));
+  }
+  const queued = await callWorkerJson(request, "/queue", { method: "POST", body: JSON.stringify({ playerId: session.playerId, combo: sealed, includeButler: true }) });
+  const entryName = queued.data?.entry?.name || validation.data?.name || sealed;
+  return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: queued.ok ? `Queued ${entryName}. Resolved battles: ${queued.data.resolved ?? 0}` : `Queue failed: ${queued.data.error || "temporarily unavailable"}` }));
+}
+
+async function sendDuelPrompt(env, chatId, session, messageId = null) {
+  await saveSession(env, chatId, { ...session, mode: "awaiting_duel_opponent" });
+  const payload = {
+    chat_id: chatId,
+    text: `Duel mode armed with ${session.lastCombo || "your next sealed technique"}.
+
+Paste an opponent combo ending in ${FINISHER}, or send a rival player ID.`,
+    reply_markup: { inline_keyboard: [[{ text: "Cancel", callback_data: "nav:cancel" }]] }
+  };
+  if (messageId) return telegram(env, "editMessageText", { ...payload, message_id: messageId });
+  return telegram(env, "sendMessage", payload);
+}
+
+async function runDuel(request, env, chatId, session, opponentArg) {
+  if (!session.lastCombo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chatId, text: `Cast and seal your technique first with ${STATIC_BUTTONS.cast}.` }));
+  let opponent = normalizeSealedCombo(opponentArg);
+  let opponentPlayer = "";
+  if (!HAND_SIGN_PATTERN.test(opponent)) {
+    const rival = await callWorkerJson(request, `/stats?id=${encodeURIComponent(opponentArg)}`);
+    const signature = rival.data.signature_jutsu?.[0];
+    if (!signature?.combo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chatId, text: "That player has no saved signature jutsu yet. Paste a combo instead." }));
+    opponent = signature.combo;
+    opponentPlayer = opponentArg;
+  }
+  const nextSession = { ...session };
+  delete nextSession.mode;
+  await saveSession(env, chatId, nextSession);
+  const duel = await callWorkerJson(request, `/simulate?combo=${encodeURIComponent(session.lastCombo)}&opponent=${encodeURIComponent(opponent)}&playerA=${encodeURIComponent(session.playerId)}&playerB=${encodeURIComponent(opponentPlayer)}`);
+  const duelText = duel.ok
+    ? [
+      `Duel result: ${duel.data.winner}`,
+      `${duel.data.combo.name} vs ${duel.data.opponent.name}`,
+      ...duel.data.rounds.map(r => `${r.attacker}: ${r.damage}`)
+    ].join("\n")
+    : `Duel failed: ${duel.data.error}`;
+  return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: duelText }));
+}
+
 async function handleMessage(request, env, message) {
   const chat = message.chat;
   const textBody = (message.text || "").trim();
   const [typedCommand, ...args] = textBody.split(/\s+/);
   const command = Object.values(STATIC_BUTTONS).includes(textBody) ? textBody : typedCommand;
   const session = await ensurePlayer(request, env, chat, message.from);
+
+  if (session.mode === "awaiting_duel_opponent" && textBody) {
+    return runDuel(request, env, chat.id, session, textBody);
+  }
 
   if (HAND_SIGN_PATTERN.test(textBody)) {
     return sendLookupPreview(request, env, chat.id, session, textBody);
@@ -462,10 +534,7 @@ async function handleMessage(request, env, message) {
   if (command === "/queue" || command === STATIC_BUTTONS.queue) {
     const sealed = session.last_sealed_jutsu || session.lastCombo;
     if (!sealed) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}, or paste a combo and tap Save/Seal.` }));
-    const validation = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
-    if (!validation.ok) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Queue failed: your sealed technique is invalid (${validation.data.error}). Seal a fresh combo first.` }));
-    const queued = await callWorkerJson(request, "/queue", { method: "POST", body: JSON.stringify({ playerId: session.playerId, combo: sealed, includeButler: true }) });
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: queued.ok ? `Queued ${queued.data.entry.name}. Resolved battles: ${queued.data.resolved}` : `Queue failed: ${queued.data.error}` }));
+    return queueCombo(request, env, chat.id, session, sealed);
   }
 
   if (command === "/arena" || command === STATIC_BUTTONS.arena) {
@@ -493,23 +562,51 @@ async function handleMessage(request, env, message) {
   if (command === "/duel" || command === STATIC_BUTTONS.duel) {
     if (!session.lastCombo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Cast and seal your technique first with ${STATIC_BUTTONS.cast}.` }));
     const opponentArg = args.join(" ");
-    if (!opponentArg) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Paste an opponent combo or player ID after tapping ${STATIC_BUTTONS.duel}, for example:\n👊🏻🖖🏻${FINISHER}` }));
-
-    let opponent = opponentArg;
-    let opponentPlayer = "";
-    if (!opponentArg.endsWith(FINISHER)) {
-      const rival = await callWorkerJson(request, `/stats?id=${encodeURIComponent(opponentArg)}`);
-      const signature = rival.data.signature_jutsu?.[0];
-      if (!signature?.combo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: "That player has no saved signature jutsu yet. Paste a combo instead." }));
-      opponent = signature.combo;
-      opponentPlayer = opponentArg;
-    }
-
-    const duel = await callWorkerJson(request, `/simulate?combo=${encodeURIComponent(session.lastCombo)}&opponent=${encodeURIComponent(opponent)}&playerA=${encodeURIComponent(session.playerId)}&playerB=${encodeURIComponent(opponentPlayer)}`);
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: duel.ok ? `Duel result: ${duel.data.winner}\n${duel.data.combo.name} vs ${duel.data.opponent.name}\n${duel.data.rounds.map(r => `${r.attacker}: ${r.damage}`).join("\n")}` : `Duel failed: ${duel.data.error}` }));
+    if (!opponentArg) return sendDuelPrompt(env, chat.id, session);
+    return runDuel(request, env, chat.id, session, opponentArg);
   }
 
   return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Unknown action. Tap ${STATIC_BUTTONS.help}.` }));
+}
+
+
+async function handleFrontEndCallback(request, env, callback) {
+  const chatId = callback.message.chat.id;
+  const session = await getSession(env, chatId);
+  const [scope, action, token] = callback.data.split(":");
+
+  if (scope === "nav") {
+    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id });
+    if (action === "cancel") {
+      const next = { ...session };
+      delete next.mode;
+      await saveSession(env, chatId, next);
+      return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: "Cancelled. Choose your next action.", reply_markup: mainMenuKeyboard() });
+    }
+    if (action === "cast") return showCast(request, env, chatId, callback.message.message_id);
+    if (action === "duel") return session.lastCombo
+      ? sendDuelPrompt(env, chatId, session, callback.message.message_id)
+      : telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal your technique first with ${STATIC_BUTTONS.cast}.`, reply_markup: mainMenuKeyboard() });
+    if (action === "queue") {
+      const sealed = session.last_sealed_jutsu || session.lastCombo;
+      if (!sealed) return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}, or paste a combo and tap Save/Seal.`, reply_markup: mainMenuKeyboard() });
+      return queueCombo(request, env, chatId, session, sealed);
+    }
+    const fakeMessage = { chat: callback.message.chat, from: callback.from, text: STATIC_BUTTONS[action] || `/${action}` };
+    return handleMessage(request, env, fakeMessage);
+  }
+
+  if ((scope === "duel" || scope === "queue") && action === "use") {
+    const sealed = session.pendingLookups?.[token];
+    if (!sealed) {
+      await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Preview expired. Paste the combo again." });
+      return;
+    }
+    const next = { ...session, lastCombo: sealed, last_sealed_jutsu: sealed };
+    await saveSession(env, chatId, next);
+    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: scope === "queue" ? "Queuing this technique." : "Duel mode armed." });
+    return scope === "queue" ? queueCombo(request, env, chatId, next, sealed) : sendDuelPrompt(env, chatId, next, callback.message.message_id);
+  }
 }
 
 export async function handleTelegramConfig(request, env) {
@@ -573,6 +670,7 @@ export async function handleTelegramWebhook(request, env) {
   try {
     if (update.callback_query?.data?.startsWith("cast:")) await handleCastCallback(request, env, update.callback_query);
     else if (update.callback_query?.data?.startsWith("lookup:seal:")) await handleLookupCallback(request, env, update.callback_query);
+    else if (update.callback_query?.data?.startsWith("nav:") || update.callback_query?.data?.startsWith("duel:use:") || update.callback_query?.data?.startsWith("queue:use:")) await handleFrontEndCallback(request, env, update.callback_query);
     else if (update.message) await handleMessage(request, env, update.message);
     return json({ ok: true });
   } catch (error) {
