@@ -3,6 +3,7 @@ const APP_NAME = "emoji-alchemy-worker";
 const APP_VERSION = "1.1.0";
 const FINISHER = "🙏🏻";
 const MAX_HAND_SIGNS = 5;
+const PUBLIC_BALANCE_MAX_LENGTH = 3;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
 const FORCE_ADVANTAGE_BONUS = 18;
 const FORCE_ADVANTAGE_SCALE = 0.08;
@@ -156,13 +157,17 @@ return Object.fromEntries(Object.keys(GESTURES).map(gesture=>[gesture,outcomeFor
 
 
 
-const ELEMENTAL_ULTIMATES={
-"🤜🏻🤛🏻✊🏻👊🏻🖕🏻":{name:"Meteor Fang Cataclysm",element:"Inferno",atk:28,def:0,spc:7},
-"🤚🏻🖐🏻✋🏻👐🏻🤲🏻":{name:"World-Turtle Aegis",element:"Terra",atk:0,def:32,spc:4},
-"🖖🏻🤟🏻🤞🏻✌🏻☝🏻":{name:"Celestial Mystic Seal",element:"Astral",atk:4,def:4,spc:32},
-"👏🏻🙌🏻🫶🏻🫴🏻👌🏻":{name:"Aurora Heart Mandala",element:"Luminous",atk:6,def:14,spc:24},
-"👉🏻👈🏻👆🏻👇🏻🫵🏻":{name:"Five-Point Thunder Sentence",element:"Storm",atk:22,def:5,spc:15}
-};
+function ultimateKey(signs){
+return [...signs].sort().join("");
+}
+
+const ELEMENTAL_ULTIMATES=Object.fromEntries([
+[["🤜🏻","🤛🏻","✊🏻","👊🏻","🖕🏻"],{name:"Meteor Fang Cataclysm",element:"Inferno",atk:28,def:0,spc:7}],
+[["🤚🏻","🖐🏻","✋🏻","👐🏻","🤲🏻"],{name:"World-Turtle Aegis",element:"Terra",atk:0,def:32,spc:4}],
+[["🖖🏻","🤟🏻","🤞🏻","✌🏻","☝🏻"],{name:"Celestial Mystic Seal",element:"Astral",atk:4,def:4,spc:32}],
+[["👏🏻","🙌🏻","🫶🏻","🫴🏻","👌🏻"],{name:"Aurora Heart Mandala",element:"Luminous",atk:6,def:14,spc:24}],
+[["👉🏻","👈🏻","👆🏻","👇🏻","🫵🏻"],{name:"Five-Point Thunder Sentence",element:"Storm",atk:22,def:5,spc:15}]
+].map(([signs,ultimate])=>[ultimateKey(signs),ultimate]));
 
 const FINISHERS={
 
@@ -506,7 +511,7 @@ const repetitionPenalty=(combo.length-uniqueSigns)*4;
 const diversityBonus=uniqueSigns*2;
 const complexityBonus=Math.max(0,combo.length-2)*2;
 const longComboRisk=Math.max(0,combo.length-3)*LONG_COMBO_RISK_STEP;
-const ultimate=ELEMENTAL_ULTIMATES[combo.join("")] || null;
+const ultimate=ELEMENTAL_ULTIMATES[ultimateKey(combo)] || null;
 if(ultimate){
 atk+=ultimate.atk;
 def+=ultimate.def;
@@ -1615,9 +1620,9 @@ function sealedComboFromSigns(signs){
 return `${signs.join("")}${FINISHER}`;
 }
 
-async function runBalanceSimulator(maxLength=3){
+async function runBalanceSimulator(maxLength=3,limit=PUBLIC_BALANCE_MAX_LENGTH){
 const gestures=Object.keys(GESTURES);
-const cappedLength=Math.max(1,Math.min(MAX_HAND_SIGNS,Number(maxLength) || 3));
+const cappedLength=Math.max(1,Math.min(limit,Number(maxLength) || 3));
 const combos=[];
 function walk(prefix,length){
 if(prefix.length===length){
@@ -1871,8 +1876,14 @@ availableCommandsUrl:"/help"
 if(path==="/rules")
 return json(CODEX.rules);
 
-if(path==="/balance/simulate")
-return json(await runBalanceSimulator(url.searchParams.get("maxLength") || 3));
+if(path==="/balance/simulate"){
+const maxLength=url.searchParams.get("maxLength") || 3;
+const requestedLength=Number(maxLength) || 3;
+const limit=isAuthorizedConfigRequest(request,env) ? MAX_HAND_SIGNS : PUBLIC_BALANCE_MAX_LENGTH;
+if(requestedLength>limit)
+return json({error:"Requested maxLength exceeds the allowed balance simulator limit.",requestedMaxLength:requestedLength,maxLengthLimit:limit,adminAuthenticated:limit===MAX_HAND_SIGNS},400);
+return json(await runBalanceSimulator(maxLength,limit));
+}
 
 
 
