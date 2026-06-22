@@ -664,7 +664,21 @@ async function handleFrontEndCallback(request, env, callback) {
   }
 }
 
+function configAuthToken(env) {
+  return env?.ADMIN_TOKEN || env?.CONFIG_ADMIN_TOKEN || "";
+}
+
+function isAuthorizedConfigRequest(request, env) {
+  const token = configAuthToken(env);
+  if (!token) return false;
+  const auth = request.headers.get("Authorization") || "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const header = request.headers.get("X-Admin-Token") || "";
+  return bearer === token || header === token;
+}
+
 export async function handleTelegramConfig(request, env) {
+  if (!isAuthorizedConfigRequest(request, env)) return json({ error: "Unauthorized. Set ADMIN_TOKEN and send it as Bearer or X-Admin-Token." }, 401);
   if (!env?.BOT_SESSIONS) return json({ error: "Missing BOT_SESSIONS KV binding" }, 503);
   if (request.method !== "POST") return text("Use POST", 405);
 
