@@ -5,6 +5,7 @@ const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
 const FORCE_ADVANTAGE_BONUS = 18;
 const FORCE_ADVANTAGE_SCALE = 0.08;
 const LONG_COMBO_RISK_STEP = 5;
+const AI_BUTLER_HISTORY_LIMIT = 100;
 
 const AI_CONFIG_KEY = "cloudflare-ai:config";
 const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
@@ -43,6 +44,21 @@ preferredStyle:"Mystic",
 adaptationLevel:0.1
 }
 };
+
+function getArenaPersistenceMode(env){
+
+if(env?.ARENA_KV)
+return {mode:"kv",durable:true,warning:null};
+
+return {
+mode:"memory",
+durable:false,
+warning:"ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted."
+};
+
+}
+
+
 
 function normalizeArena(arena){
 const base=arena && typeof arena==="object" ? arena : {};
@@ -750,7 +766,7 @@ history:[...(aiButler.history || [])]
 
 const aiWon=winnerId===updated.id;
 updated.history.unshift({battleId,winner:winnerId,at:completedAt});
-updated.history=updated.history.slice(0,25);
+updated.history=updated.history.slice(0,AI_BUTLER_HISTORY_LIMIT);
 const wins=updated.history.filter(h=>h.winner===updated.id).length;
 updated.winRate=Number((wins/updated.history.length).toFixed(2));
 updated.adaptationLevel=Number(Math.min(1,updated.adaptationLevel+(aiWon ? 0.01 : 0.05)).toFixed(2));
@@ -763,6 +779,10 @@ return updated;
 
 
 async function loadArena(env){
+
+const persistence=getArenaPersistenceMode(env);
+if(!persistence.durable)
+console.warn(persistence.warning);
 
 if(env?.ARENA_KV){
 const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
@@ -1620,6 +1640,20 @@ headers:{
 
 
 
+export {
+AI_BUTLER_HISTORY_LIMIT,
+FORCE_ADVANTAGE_BONUS,
+FORCE_ADVANTAGE_SCALE,
+buildSpell,
+forceAdvantage,
+getArenaPersistenceMode,
+parseTechnique,
+scoreDuelist,
+updateAiButlerAfterBattle
+};
+
+
+
 export default {
 
 
@@ -1702,6 +1736,7 @@ const arena=await loadArena(env);
 
 if(path==="/arena")
 return json({
+persistence:getArenaPersistenceMode(env),
 queue:arena.queue,
 activeBattles:arena.activeBattles,
 history:arena.history.slice(0,25),
@@ -1726,7 +1761,7 @@ if(request.method!=="POST" && request.method!=="GET")
 return json({error:"Use POST /queue to submit a technique or GET /queue to inspect waiting entries"},405);
 
 if(request.method==="GET")
-return json({queue:arena.queue});
+return json({persistence:getArenaPersistenceMode(env),queue:arena.queue});
 
 let body={};
 try{
