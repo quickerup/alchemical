@@ -6,6 +6,14 @@ const GESTURE_CACHE = {
   loadedAt: 0
 };
 const TELEGRAM_CONFIG_KEY = "telegram:config";
+const DEFAULT_CAST_GESTURES = [
+  "💪🏻", "👏🏻", "👍🏻", "👎🏻", "🫶🏻",
+  "🙌🏻", "👐🏻", "🤲🏻", "🤜🏻", "🤛🏻",
+  "✊🏻", "👊🏻", "🫸🏻", "🫷🏻", "🤚🏻",
+  "🖐🏻", "✋🏻", "🖖🏻", "🤟🏻", "🤞🏻",
+  "✌🏻", "🤌🏻", "🫳🏻", "🫴🏻", "🫲🏻",
+  "🫱🏻", "👋🏻", "🫰🏻", "🤙🏻", "🤏🏻"
+];
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -167,9 +175,22 @@ async function ensurePlayer(request, env, chat) {
 
 async function loadGestures(request) {
   if (GESTURE_CACHE.values) return GESTURE_CACHE.values;
-  const response = await fetch(workerUrl(request, "/gestures"));
-  const data = await response.json();
-  GESTURE_CACHE.values = Object.keys(data.gestures || {});
+
+  try {
+    const response = await fetch(workerUrl(request, "/gestures"));
+    const data = await parseResponseBody(response);
+    const gestures = Object.keys(data.gestures || {});
+    if (response.ok && gestures.length) {
+      GESTURE_CACHE.values = gestures;
+      GESTURE_CACHE.loadedAt = Date.now();
+      return GESTURE_CACHE.values;
+    }
+    console.warn("Falling back to default Telegram cast gestures", data.error || response.status);
+  } catch (error) {
+    console.warn("Falling back to default Telegram cast gestures", error.message);
+  }
+
+  GESTURE_CACHE.values = DEFAULT_CAST_GESTURES;
   GESTURE_CACHE.loadedAt = Date.now();
   return GESTURE_CACHE.values;
 }
@@ -226,10 +247,16 @@ async function handleCastCallback(request, env, callback) {
     session.lastCombo = sealed;
     session.castCombo = [];
     await saveSession(env, chatId, session);
+    const technique = lookup.data || {};
+    const stats = technique.stats || {};
+    const resultText = lookup.ok && technique.name && technique.rank && technique.stats
+      ? `Sealed: ${sealed}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}`
+      : `Sealed: ${sealed}\nTechnique lookup is temporarily unavailable. Try /duel or /queue in a moment.`;
+
     await telegram(env, "editMessageText", {
       chat_id: chatId,
       message_id: callback.message.message_id,
-      text: `Sealed: ${sealed}\n${lookup.data.name} (${lookup.data.rank})\nATK ${lookup.data.stats.atk} / DEF ${lookup.data.stats.def} / SPC ${lookup.data.stats.spc}`
+      text: resultText
     });
     await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique sealed." });
     return;
