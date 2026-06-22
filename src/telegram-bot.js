@@ -121,19 +121,48 @@ async function saveSession(env, chatId, session) {
   await kvPut(env, `chat:${chatId}`, session);
 }
 
+const STATIC_BUTTONS = {
+  cast: "🥷 Cast",
+  duel: "⚔️ Duel",
+  queue: "📥 Queue",
+  arena: "🏟️ Arena",
+  butler: "🤖 Butler",
+  myjutsu: "📜 My Jutsu",
+  profile: "👤 Profile",
+  help: "❓ Help"
+};
+
+function staticButtonKeyboard() {
+  return {
+    keyboard: [
+      [STATIC_BUTTONS.cast, STATIC_BUTTONS.duel],
+      [STATIC_BUTTONS.queue, STATIC_BUTTONS.arena],
+      [STATIC_BUTTONS.butler, STATIC_BUTTONS.myjutsu],
+      [STATIC_BUTTONS.profile, STATIC_BUTTONS.help]
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  };
+}
+
 function commandList(playerId) {
   return [
     "🥷 Welcome to Emoji Jutsu.",
     playerId ? `Player ID: ${playerId}` : null,
     "",
-    "/cast — build a technique with buttons, seal with 🙏🏻",
-    "/duel [playerId] — duel a saved rival or paste a combo",
-    "/queue — submit your last sealed technique to the arena",
-    "/arena — leaderboard and queue",
-    "/butler — inspect the AI Butler",
-    "/myjutsu — saved signature techniques",
-    "/profile — your stats"
+    "Use the emoji buttons at the bottom of the screen:",
+    `${STATIC_BUTTONS.cast} — build a technique with sign buttons, seal with ${FINISHER}`,
+    `${STATIC_BUTTONS.duel} — duel a saved rival or paste a combo`,
+    `${STATIC_BUTTONS.queue} — submit your last sealed technique to the arena`,
+    `${STATIC_BUTTONS.arena} — leaderboard and queue`,
+    `${STATIC_BUTTONS.butler} — inspect the AI Butler`,
+    `${STATIC_BUTTONS.myjutsu} — saved signature techniques`,
+    `${STATIC_BUTTONS.profile} — your stats`
   ].filter(Boolean).join("\n");
+}
+
+function withStaticButtons(payload) {
+  return { reply_markup: staticButtonKeyboard(), ...payload };
 }
 
 function createdAt() {
@@ -251,7 +280,7 @@ async function handleCastCallback(request, env, callback) {
     const stats = technique.stats || {};
     const resultText = lookup.ok && technique.name && technique.rank && technique.stats
       ? `Sealed: ${sealed}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}`
-      : `Sealed: ${sealed}\nTechnique lookup is temporarily unavailable. Try /duel or /queue in a moment.`;
+      : `Sealed: ${sealed}\nTechnique lookup is temporarily unavailable. Try ${STATIC_BUTTONS.duel} or ${STATIC_BUTTONS.queue} in a moment.`;
 
     await telegram(env, "editMessageText", {
       chat_id: chatId,
@@ -276,63 +305,64 @@ function formatArena(arena) {
 async function handleMessage(request, env, message) {
   const chat = message.chat;
   const textBody = (message.text || "").trim();
-  const [command, ...args] = textBody.split(/\s+/);
+  const [typedCommand, ...args] = textBody.split(/\s+/);
+  const command = Object.values(STATIC_BUTTONS).includes(textBody) ? textBody : typedCommand;
   const session = await ensurePlayer(request, env, chat);
 
-  if (command === "/start" || command === "/help") {
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: commandList(session.playerId) });
+  if (command === "/start" || command === "/help" || command === STATIC_BUTTONS.help) {
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: commandList(session.playerId) }));
   }
 
-  if (command === "/cast") return showCast(request, env, chat.id);
+  if (command === "/cast" || command === STATIC_BUTTONS.cast) return showCast(request, env, chat.id);
 
-  if (command === "/queue") {
-    if (!session.lastCombo) return telegram(env, "sendMessage", { chat_id: chat.id, text: "Cast and seal a technique first with /cast." });
+  if (command === "/queue" || command === STATIC_BUTTONS.queue) {
+    if (!session.lastCombo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.` }));
     const queued = await callWorkerJson(request, "/queue", { method: "POST", body: JSON.stringify({ playerId: session.playerId, combo: session.lastCombo, includeButler: true }) });
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: queued.ok ? `Queued ${queued.data.entry.name}. Resolved battles: ${queued.data.resolved}` : `Queue failed: ${queued.data.error}` });
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: queued.ok ? `Queued ${queued.data.entry.name}. Resolved battles: ${queued.data.resolved}` : `Queue failed: ${queued.data.error}` }));
   }
 
-  if (command === "/arena") {
+  if (command === "/arena" || command === STATIC_BUTTONS.arena) {
     const arena = await callWorkerJson(request, "/arena");
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: formatArena(arena.data) });
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: formatArena(arena.data) }));
   }
 
-  if (command === "/butler") {
+  if (command === "/butler" || command === STATIC_BUTTONS.butler) {
     const butler = await callWorkerJson(request, "/butler");
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: `AI Butler\nStyle: ${butler.data.preferredStyle}\nWin rate: ${butler.data.winRate}\nNext: ${butler.data.nextCombo}` });
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `AI Butler\nStyle: ${butler.data.preferredStyle}\nWin rate: ${butler.data.winRate}\nNext: ${butler.data.nextCombo}` }));
   }
 
-  if (command === "/profile") {
+  if (command === "/profile" || command === STATIC_BUTTONS.profile) {
     const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
     const p = stats.data.player || {};
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: `Profile ${p.username || session.username}\nID: ${session.playerId}\n${p.wins || 0}W/${p.losses || 0}L/${p.draws || 0}D\nXP: ${p.xp || 0}\nPoints: ${p.points || 0}` });
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Profile ${p.username || session.username}\nID: ${session.playerId}\n${p.wins || 0}W/${p.losses || 0}L/${p.draws || 0}D\nXP: ${p.xp || 0}\nPoints: ${p.points || 0}` }));
   }
 
-  if (command === "/myjutsu") {
+  if (command === "/myjutsu" || command === STATIC_BUTTONS.myjutsu) {
     const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
     const list = (stats.data.signature_jutsu || []).slice(0, 10).map(j => `• ${j.name}: ${j.combo}`).join("\n") || "No saved signatures yet.";
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: list });
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: list }));
   }
 
-  if (command === "/duel") {
-    if (!session.lastCombo) return telegram(env, "sendMessage", { chat_id: chat.id, text: "Cast and seal your technique first with /cast." });
+  if (command === "/duel" || command === STATIC_BUTTONS.duel) {
+    if (!session.lastCombo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Cast and seal your technique first with ${STATIC_BUTTONS.cast}.` }));
     const opponentArg = args.join(" ");
-    if (!opponentArg) return telegram(env, "sendMessage", { chat_id: chat.id, text: `Paste an opponent combo or player ID after /duel, for example:\n/duel 👊🏻🖖🏻${FINISHER}` });
+    if (!opponentArg) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Paste an opponent combo or player ID after tapping ${STATIC_BUTTONS.duel}, for example:\n👊🏻🖖🏻${FINISHER}` }));
 
     let opponent = opponentArg;
     let opponentPlayer = "";
     if (!opponentArg.endsWith(FINISHER)) {
       const rival = await callWorkerJson(request, `/stats?id=${encodeURIComponent(opponentArg)}`);
       const signature = rival.data.signature_jutsu?.[0];
-      if (!signature?.combo) return telegram(env, "sendMessage", { chat_id: chat.id, text: "That player has no saved signature jutsu yet. Paste a combo instead." });
+      if (!signature?.combo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: "That player has no saved signature jutsu yet. Paste a combo instead." }));
       opponent = signature.combo;
       opponentPlayer = opponentArg;
     }
 
     const duel = await callWorkerJson(request, `/simulate?combo=${encodeURIComponent(session.lastCombo)}&opponent=${encodeURIComponent(opponent)}&playerA=${encodeURIComponent(session.playerId)}&playerB=${encodeURIComponent(opponentPlayer)}`);
-    return telegram(env, "sendMessage", { chat_id: chat.id, text: duel.ok ? `Duel result: ${duel.data.winner}\n${duel.data.combo.name} vs ${duel.data.opponent.name}\n${duel.data.rounds.map(r => `${r.attacker}: ${r.damage}`).join("\n")}` : `Duel failed: ${duel.data.error}` });
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: duel.ok ? `Duel result: ${duel.data.winner}\n${duel.data.combo.name} vs ${duel.data.opponent.name}\n${duel.data.rounds.map(r => `${r.attacker}: ${r.damage}`).join("\n")}` : `Duel failed: ${duel.data.error}` }));
   }
 
-  return telegram(env, "sendMessage", { chat_id: chat.id, text: "Unknown command. Try /help." });
+  return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Unknown action. Tap ${STATIC_BUTTONS.help}.` }));
 }
 
 export async function handleTelegramConfig(request, env) {
@@ -394,7 +424,7 @@ export async function handleTelegramWebhook(request, env) {
   } catch (error) {
     console.error(error);
     const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
-    if (chatId) await telegram(env, "sendMessage", { chat_id: chatId, text: `Bot error: ${error.message}` });
+    if (chatId) await telegram(env, "sendMessage", withStaticButtons({ chat_id: chatId, text: `Bot error: ${error.message}` }));
     return json({ ok: false, error: error.message }, 200);
   }
 }
