@@ -6,6 +6,7 @@ const GESTURE_CACHE = {
   loadedAt: 0
 };
 const TELEGRAM_CONFIG_KEY = "telegram:config";
+const DEFAULT_TRANSMUTATION_DELETE_DELAY_MS = 2500;
 const DEFAULT_CAST_GESTURES = [
   "💪🏻", "👏🏻", "👍🏻", "👎🏻", "🫶🏻",
   "🙌🏻", "👐🏻", "🤲🏻", "🤜🏻", "🤛🏻",
@@ -52,7 +53,9 @@ async function getBotConfig(env) {
   const stored = await getStoredTelegramConfig(env);
   return {
     token: stored.token || env?.TELEGRAM_BOT_TOKEN || "",
-    webhookSecret: stored.webhookSecret || env?.TELEGRAM_WEBHOOK_SECRET || ""
+    webhookSecret: stored.webhookSecret || env?.TELEGRAM_WEBHOOK_SECRET || "",
+    gestureStickers: stored.gestureStickers || {},
+    transmutationDeleteDelayMs: Number(stored.transmutationDeleteDelayMs || env?.TELEGRAM_TRANSMUTATION_DELETE_DELAY_MS || DEFAULT_TRANSMUTATION_DELETE_DELAY_MS)
   };
 }
 
@@ -83,6 +86,59 @@ async function telegram(env, method, payload) {
   }
 
   return response.json();
+}
+
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function stickerFileIdForGesture(config, gesture) {
+  return config.gestureStickers?.[gesture] || config.gestureStickers?.[encodeURIComponent(gesture)] || "";
+}
+
+function splitSealedCombo(combo, gestures) {
+  const signs = [];
+  let remaining = normalizeSealedCombo(combo);
+
+  while (remaining && remaining !== FINISHER) {
+    const gesture = gestures.find(candidate => remaining.startsWith(candidate));
+    if (!gesture) return [];
+    signs.push(gesture);
+    remaining = remaining.slice(gesture.length);
+  }
+
+  return remaining === FINISHER ? [...signs, FINISHER] : [];
+}
+
+async function deleteTelegramMessages(env, chatId, messageIds) {
+  await Promise.all(messageIds.map(async messageId => {
+    try {
+      await telegram(env, "deleteMessage", { chat_id: chatId, message_id: messageId });
+    } catch (error) {
+      console.warn(`Telegram deleteMessage failed for ${messageId}: ${error.message}`);
+    }
+  }));
+}
+
+async function sendTransmutationSequence(request, env, chatId, combo) {
+  const config = await getBotConfig(env);
+  const gestures = await loadGestures(request);
+  const signs = splitSealedCombo(combo, gestures);
+  const sentMessageIds = [];
+
+  for (const sign of signs) {
+    const sticker = stickerFileIdForGesture(config, sign);
+    if (!sticker) continue;
+    const sent = await telegram(env, "sendSticker", { chat_id: chatId, sticker });
+    if (sent.result?.message_id) sentMessageIds.push(sent.result.message_id);
+  }
+
+  if (!sentMessageIds.length) return;
+
+  const delayMs = Math.max(0, Number(config.transmutationDeleteDelayMs) || DEFAULT_TRANSMUTATION_DELETE_DELAY_MS);
+  await sleep(delayMs);
+  await deleteTelegramMessages(env, chatId, sentMessageIds);
 }
 
 function workerUrl(request, path) {
@@ -303,6 +359,12 @@ async function handleCastCallback(request, env, callback) {
     await telegram(env, "editMessageText", {
       chat_id: chatId,
       message_id: callback.message.message_id,
+      text: `Transmutation circle opened for ${sealed}...`
+    });
+    await sendTransmutationSequence(request, env, chatId, sealed);
+    await telegram(env, "editMessageText", {
+      chat_id: chatId,
+      message_id: callback.message.message_id,
       text: resultText
     });
     await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique sealed." });
@@ -374,6 +436,8 @@ async function handleLookupCallback(request, env, callback) {
   await saveSession(env, chatId, nextSession);
 
   await callWorkerJson(request, "/jutsu/save", { method: "POST", body: JSON.stringify({ playerId: session.playerId, name: lookup.data.name, combo: sealed }) });
+  await telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Transmutation circle opened for ${sealed}...` });
+  await sendTransmutationSequence(request, env, chatId, sealed);
   await telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Sealed: ${sealed} → ${lookup.data.outcome || "✨"}\n${lookup.data.name} (${lookup.data.rank})\nSaved as your latest jutsu.` });
   await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique saved and sealed." });
 }
@@ -464,7 +528,11 @@ export async function handleTelegramConfig(request, env) {
 
   const existing = await getStoredTelegramConfig(env);
   const webhookSecret = (body.webhookSecret || existing.webhookSecret || crypto.randomUUID()).trim();
-  const config = { token, webhookSecret, updatedAt: new Date().toISOString() };
+  const gestureStickers = body.gestureStickers && typeof body.gestureStickers === "object"
+    ? body.gestureStickers
+    : existing.gestureStickers || {};
+  const transmutationDeleteDelayMs = Number(body.transmutationDeleteDelayMs || existing.transmutationDeleteDelayMs || DEFAULT_TRANSMUTATION_DELETE_DELAY_MS);
+  const config = { token, webhookSecret, gestureStickers, transmutationDeleteDelayMs, updatedAt: new Date().toISOString() };
   await env.BOT_SESSIONS.put(TELEGRAM_CONFIG_KEY, JSON.stringify(config));
 
   const url = new URL(request.url);
@@ -483,6 +551,8 @@ export async function handleTelegramConfig(request, env) {
     webhookUrl,
     webhookSecret,
     webhook,
+    gestureStickerCount: Object.keys(gestureStickers).length,
+    transmutationDeleteDelayMs,
     message: "Telegram bot token saved and webhook configured. The token is not returned."
   });
 }
