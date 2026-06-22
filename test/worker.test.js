@@ -9,7 +9,8 @@ import {
   getArenaPersistenceMode,
   parseTechnique,
   scoreDuelist,
-  updateAiButlerAfterBattle
+  updateAiButlerAfterBattle,
+  default as worker
 } from "../src/worker.js";
 
 const seal = combo => encodeURIComponent(`${combo}🙏🏻`);
@@ -69,6 +70,21 @@ test("specific gesture trees unlock named elemental ultimates", () => {
   assert.equal(spell.ultimate.name, "Celestial Mystic Seal");
   assert.equal(spell.ultimate.element, "Astral");
   assert.ok(spell.power > 100);
+});
+
+
+test("elemental ultimates unlock from any permutation of the five required gestures", () => {
+  const canonical = buildSpell(["🖖🏻", "🤟🏻", "🤞🏻", "✌🏻", "☝🏻"]);
+  const permuted = buildSpell(["☝🏻", "✌🏻", "🤞🏻", "🤟🏻", "🖖🏻"]);
+  assert.equal(permuted.ultimate.name, canonical.ultimate.name);
+  assert.equal(permuted.ultimate.element, canonical.ultimate.element);
+});
+
+test("public balance simulator rejects expensive max lengths", async () => {
+  const response = await worker.fetch(new Request("https://example.com/balance/simulate?maxLength=5"), {});
+  assert.equal(response.status, 400);
+  const data = await response.json();
+  assert.equal(data.maxLengthLimit, 3);
 });
 
 test("AI Butler keeps enough recent battle history for adaptation metrics", () => {
