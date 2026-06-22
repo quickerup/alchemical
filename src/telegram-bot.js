@@ -14,6 +14,21 @@ const DEFAULT_CAST_GESTURES = [
   "✌🏻", "🤌🏻", "🫳🏻", "🫴🏻", "🫲🏻",
   "🫱🏻", "👋🏻", "🫰🏻", "🤙🏻", "🤏🏻"
 ];
+const HAND_SIGN_PATTERN = new RegExp(`^(?:${DEFAULT_CAST_GESTURES.map(escapeRegExp).join("|")}){1,5}(?:${escapeRegExp(FINISHER)})?$`, "u");
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function shortId(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest)).slice(0, 6).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeSealedCombo(input) {
+  const combo = (input || "").trim();
+  return combo.endsWith(FINISHER) ? combo : `${combo}${FINISHER}`;
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -169,11 +184,11 @@ function createdAt() {
   return Date.now();
 }
 
-async function createTelegramPlayer(env, chat) {
+async function createTelegramPlayer(env, actor) {
   if (!env?.DB) throw new Error("D1 database binding DB is not configured");
 
-  const baseName = (chat.username || chat.first_name || `telegram-${chat.id}`).trim();
-  const usernames = [baseName, `${baseName}-${chat.id}`];
+  const baseName = (actor.username || actor.first_name || `telegram-${actor.id}`).trim();
+  const usernames = [baseName, `${baseName}-${actor.id}`];
   let lastError = null;
 
   for (const username of usernames) {
@@ -192,11 +207,11 @@ VALUES (?, ?, ?)
   throw new Error(`Player could not be created: ${lastError?.message || "unknown database error"}`);
 }
 
-async function ensurePlayer(request, env, chat) {
+async function ensurePlayer(request, env, chat, from = null) {
   const session = await getSession(env, chat.id);
   if (session.playerId) return session;
 
-  const created = await createTelegramPlayer(env, chat);
+  const created = await createTelegramPlayer(env, from || chat);
   const next = { ...session, playerId: created.playerId, username: created.username };
   await saveSession(env, chat.id, next);
   return next;
@@ -274,6 +289,7 @@ async function handleCastCallback(request, env, callback) {
     const sealed = `${combo.join("")}${FINISHER}`;
     const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
     session.lastCombo = sealed;
+    session.last_sealed_jutsu = sealed;
     session.castCombo = [];
     await saveSession(env, chatId, session);
     const technique = lookup.data || {};
@@ -302,12 +318,74 @@ function formatArena(arena) {
   return `Arena queue: ${(arena.queue || []).length}\n\nLeaderboard:\n${leaders}`;
 }
 
+function formatTechniquePreview(combo, technique) {
+  const stats = technique.stats || {};
+  const effect = technique.battleStyle || technique.spell || `${stats.class || technique.class || "Unknown"} Technique`;
+  return [
+    `Preview: ${combo}`,
+    `${technique.name} (${technique.rank || "Unranked"})`,
+    `Element/Type: ${stats.class || technique.class || "Unknown"}`,
+    `Damage/Effect: Power ${stats.power ?? "?"}; ${effect}`,
+    `Chakra Cost: ${stats.cost ?? "?"}`,
+    "",
+    "This is only a lookup preview. Tap Save/Seal to make it your queued technique."
+  ].join("\n");
+}
+
+async function sendLookupPreview(request, env, chatId, session, rawCombo) {
+  const sealed = normalizeSealedCombo(rawCombo);
+  const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
+  if (!lookup.ok || !lookup.data?.name || !lookup.data?.stats) {
+    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chatId, text: `Technique lookup failed: ${lookup.data?.error || "temporarily unavailable"}` }));
+  }
+
+  const token = await shortId(`${chatId}:${sealed}`);
+  const pendingLookups = { ...(session.pendingLookups || {}), [token]: sealed };
+  await saveSession(env, chatId, { ...session, pendingLookups });
+
+  return telegram(env, "sendMessage", {
+    chat_id: chatId,
+    text: formatTechniquePreview(sealed, lookup.data),
+    reply_markup: { inline_keyboard: [[{ text: "Save/Seal", callback_data: `lookup:seal:${token}` }]] }
+  });
+}
+
+async function handleLookupCallback(request, env, callback) {
+  const chatId = callback.message.chat.id;
+  const token = callback.data.split(":")[2];
+  const session = await getSession(env, chatId);
+  const sealed = session.pendingLookups?.[token];
+  if (!sealed) {
+    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Preview expired. Paste the combo again." });
+    return;
+  }
+
+  const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
+  if (!lookup.ok || !lookup.data?.name) {
+    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: lookup.data?.error || "Lookup failed." });
+    return;
+  }
+
+  const pendingLookups = { ...(session.pendingLookups || {}) };
+  delete pendingLookups[token];
+  const nextSession = { ...session, lastCombo: sealed, last_sealed_jutsu: sealed, pendingLookups };
+  await saveSession(env, chatId, nextSession);
+
+  await callWorkerJson(request, "/jutsu/save", { method: "POST", body: JSON.stringify({ playerId: session.playerId, name: lookup.data.name, combo: sealed }) });
+  await telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Sealed: ${sealed}\n${lookup.data.name} (${lookup.data.rank})\nSaved as your latest jutsu.` });
+  await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: "Technique saved and sealed." });
+}
+
 async function handleMessage(request, env, message) {
   const chat = message.chat;
   const textBody = (message.text || "").trim();
   const [typedCommand, ...args] = textBody.split(/\s+/);
   const command = Object.values(STATIC_BUTTONS).includes(textBody) ? textBody : typedCommand;
-  const session = await ensurePlayer(request, env, chat);
+  const session = await ensurePlayer(request, env, chat, message.from);
+
+  if (HAND_SIGN_PATTERN.test(textBody)) {
+    return sendLookupPreview(request, env, chat.id, session, textBody);
+  }
 
   if (command === "/start" || command === "/help" || command === STATIC_BUTTONS.help) {
     return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: commandList(session.playerId) }));
@@ -316,8 +394,11 @@ async function handleMessage(request, env, message) {
   if (command === "/cast" || command === STATIC_BUTTONS.cast) return showCast(request, env, chat.id);
 
   if (command === "/queue" || command === STATIC_BUTTONS.queue) {
-    if (!session.lastCombo) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.` }));
-    const queued = await callWorkerJson(request, "/queue", { method: "POST", body: JSON.stringify({ playerId: session.playerId, combo: session.lastCombo, includeButler: true }) });
+    const sealed = session.last_sealed_jutsu || session.lastCombo;
+    if (!sealed) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}, or paste a combo and tap Save/Seal.` }));
+    const validation = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
+    if (!validation.ok) return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Queue failed: your sealed technique is invalid (${validation.data.error}). Seal a fresh combo first.` }));
+    const queued = await callWorkerJson(request, "/queue", { method: "POST", body: JSON.stringify({ playerId: session.playerId, combo: sealed, includeButler: true }) });
     return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: queued.ok ? `Queued ${queued.data.entry.name}. Resolved battles: ${queued.data.resolved}` : `Queue failed: ${queued.data.error}` }));
   }
 
@@ -419,6 +500,7 @@ export async function handleTelegramWebhook(request, env) {
 
   try {
     if (update.callback_query?.data?.startsWith("cast:")) await handleCastCallback(request, env, update.callback_query);
+    else if (update.callback_query?.data?.startsWith("lookup:seal:")) await handleLookupCallback(request, env, update.callback_query);
     else if (update.message) await handleMessage(request, env, update.message);
     return json({ ok: true });
   } catch (error) {
