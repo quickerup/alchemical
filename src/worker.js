@@ -9,6 +9,7 @@ const LONG_COMBO_RISK_STEP = 5;
 const AI_CONFIG_KEY = "cloudflare-ai:config";
 const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 const DEFAULT_CHRONICLE_MAX_TOKENS = 1500;
+const MAX_CHRONICLE_BODY_BYTES = 64 * 1024;
 const CHRONICLE_SYSTEM_PROMPT = `You are a highly advanced narrative translation engine. Your task is to intercept raw competitive match data (JSON format) and translate it into a highly stylized, dark, mysterious, and epic anime-style chronicle. 
 
 You must strictly adhere to the following narrative and structural rules:
@@ -710,8 +711,29 @@ JSON.stringify(aiButler.history || []),
 createdAt(),
 createdAt()
 ).run();
-}catch{
-// Older deployments without the ai_butlers migration should keep working via KV/in-memory arena state.
+}catch(error){
+try{
+await env.DB.prepare(`
+INSERT INTO ai_butlers (id, name, style, win_rate, adaptation, last_combo, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+name = excluded.name,
+style = excluded.style,
+win_rate = excluded.win_rate,
+adaptation = excluded.adaptation,
+last_combo = excluded.last_combo
+`).bind(
+aiButler.id,
+aiButler.name,
+aiButler.preferredStyle,
+aiButler.winRate,
+aiButler.adaptationLevel,
+lastCombo || aiComboForButler(aiButler),
+createdAt()
+).run();
+}catch(fallbackError){
+console.warn("ai_butlers persistence skipped",error.message,fallbackError.message);
+}
 }
 
 }
@@ -978,10 +1000,19 @@ battles:battles.results
 
 
 
+function canonicalCombo(combo){
+return String(combo || "").normalize("NFC").trim();
+}
+
+
+
 async function persistDuelResult(env,{playerA,playerB,comboA,comboB,replay}){
 
 if(!env?.DB || !playerA || !playerB)
 return;
+
+comboA=canonicalCombo(comboA);
+comboB=canonicalCombo(comboB);
 
 const winnerId=replay.winner==="Player 1" ? playerA : replay.winner==="Player 2" ? playerB : "Draw";
 const timestamp=createdAt();
@@ -1008,13 +1039,13 @@ await env.DB.prepare(`
 UPDATE signature_jutsu
 SET usage_count = usage_count + 1,
 wins = wins + CASE WHEN player_id = ? THEN 1 ELSE 0 END
-WHERE player_id IN (?, ?) AND combo IN (?, ?)
+WHERE player_id IN (?, ?) AND TRIM(combo) IN (?, ?)
 `).bind(winnerId,playerA,playerB,comboA,comboB).run();
 }else{
 await env.DB.prepare(`
 UPDATE signature_jutsu
 SET usage_count = usage_count + 1
-WHERE player_id IN (?, ?) AND combo IN (?, ?)
+WHERE player_id IN (?, ?) AND TRIM(combo) IN (?, ?)
 `).bind(playerA,playerB,comboA,comboB).run();
 }
 
@@ -1166,7 +1197,7 @@ console.warn("matchmaking_queue persistence skipped",error.message);
 
 }
 
-async function resolveArena(arena){
+async function resolveArena(arena,env){
 
 let matched=0;
 
@@ -1183,6 +1214,7 @@ const battleId=nowId("BATTLE");
 const player={decoded:first.combo,spell:first.spell,id:first.techniqueId,name:first.playerId};
 const opponent={decoded:second.combo,spell:second.spell,id:second.techniqueId,name:second.playerId};
 const replay=await simulateBattle(player,opponent,battleId);
+await persistDuelResult(env,{playerA:first.playerId,playerB:second.playerId,comboA:first.combo,comboB:second.combo,replay});
 const winnerId=replay.winner==="Player 1" ? first.playerId : replay.winner==="Player 2" ? second.playerId : "Draw";
 
 const battle={
@@ -1324,7 +1356,33 @@ updatedAt:config.updatedAt
 
 
 
+function configAuthToken(env){
+return env?.ADMIN_TOKEN || env?.CONFIG_ADMIN_TOKEN || "";
+}
+
+function isAuthorizedConfigRequest(request,env){
+const token=configAuthToken(env);
+if(!token)
+return false;
+const auth=request.headers.get("Authorization") || "";
+const bearer=auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+const header=request.headers.get("X-Admin-Token") || "";
+return bearer===token || header===token;
+}
+
+function requireConfigAuth(request,env){
+if(isAuthorizedConfigRequest(request,env))
+return null;
+return json({error:"Unauthorized. Set ADMIN_TOKEN and send it as Bearer or X-Admin-Token."},401);
+}
+
+
+
 async function handleAiConfig(request,env){
+
+const authError=requireConfigAuth(request,env);
+if(authError)
+return authError;
 
 if(!env?.BOT_SESSIONS)
 return json({error:"Missing BOT_SESSIONS KV binding"},503);
@@ -1383,9 +1441,23 @@ const config=await getAiConfig(env);
 if(!config.token || !config.accountId)
 return json({error:"Cloudflare AI is not configured. Set it with POST /ai/config."},503);
 
+const contentLength=Number.parseInt(request.headers.get("Content-Length") || "0",10);
+if(contentLength>MAX_CHRONICLE_BODY_BYTES)
+return json({error:`Match payload exceeds ${MAX_CHRONICLE_BODY_BYTES} byte limit`},413);
+
+let rawBody;
+try{
+rawBody=await request.text();
+}catch{
+return json({error:"Could not read request body"},400);
+}
+
+if(new TextEncoder().encode(rawBody).length>MAX_CHRONICLE_BODY_BYTES)
+return json({error:`Match payload exceeds ${MAX_CHRONICLE_BODY_BYTES} byte limit`},413);
+
 let matchData;
 try{
-matchData=await request.json();
+matchData=JSON.parse(rawBody);
 }catch{
 return json({error:"Invalid JSON body"},400);
 }
@@ -1400,7 +1472,7 @@ headers:{
 body:JSON.stringify({
 messages:[
 {role:"system",content:config.systemPrompt},
-{role:"user",content:JSON.stringify(matchData,null,2)}
+{role:"user",content:rawBody}
 ],
 max_tokens:config.maxTokens || DEFAULT_CHRONICLE_MAX_TOKENS
 })
@@ -1451,7 +1523,7 @@ return `<!doctype html>
 <p>Configure the Telegram bot token and webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. The Telegram token and Cloudflare AI token can be saved to Worker KV with setup buttons or curl commands.</p>
 </header>
 <main class="grid">
-<section class="card wide"><h2>Connection</h2><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
+<section class="card wide"><h2>Connection</h2><label>Admin token</label><input id="adminToken" type="password" placeholder="ADMIN_TOKEN for config changes"><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
 <section class="card wide"><h2>Cloudflare AI chronicle</h2><div class="row"><div><label>Cloudflare account ID</label><input id="cfAccountId" placeholder="account id"></div><div><label>Cloudflare AI model</label><input id="cfModel" value="@cf/meta/llama-3.1-8b-instruct"></div></div><label>Cloudflare AI API token</label><input id="cfToken" type="password" placeholder="API token with Workers AI access"><label>Raw match JSON</label><textarea id="chronicleJson" placeholder='{"match":{"id":"MATCH-123"},"rounds":[],"winner":"Player 1"}'></textarea><div class="actions"><button onclick="saveAiConfig()">Save AI config</button><button class="secondary" onclick="loadAiConfig()">Load AI config</button><button class="good" onclick="chronicle()">Generate chronicle</button></div><p class="small">Curl: <span class="kbd">POST /ai/config</span> stores token/account/model; <span class="kbd">POST /ai/chronicle</span> sends match JSON to the configured model.</p></section>
 <section class="card"><h2>Player actions</h2><label>Username</label><input id="username" value="admin-player"><button onclick="createPlayer()">Create player</button><label>Player ID</label><input id="playerId" placeholder="UUID"><div class="actions"><button class="secondary" onclick="getPlayer()">Load player</button><button class="secondary" onclick="getStats()">Stats</button></div></section>
 <section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🏻🖖🏻🙏🏻"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
@@ -1463,7 +1535,7 @@ return `<!doctype html>
 <script>
 const $=id=>document.getElementById(id);function base(){return ($('baseUrl').value||location.origin).replace(/\/$/,'')}function webhookUrl(){return base()+'/telegram/webhook'}function updateWebhookUrl(){$('webhookUrl').textContent=webhookUrl()}$('baseUrl').value=location.origin;updateWebhookUrl();$('baseUrl').addEventListener('input',updateWebhookUrl);
 function show(data,ok=true){$('status').textContent=ok?'OK':'ERROR';$('status').className='status '+(ok?'ok':'err');$('result').textContent=typeof data==='string'?data:JSON.stringify(data,null,2)}
-async function api(path,init={}){try{const r=await fetch(base()+path,{headers:{'Content-Type':'application/json',...(init.headers||{})},...init});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}show(d,r.ok);return d}catch(e){show(e.message,false)}}
+async function api(path,init={}){try{const adminToken=$('adminToken').value.trim();const authHeaders=adminToken?{'X-Admin-Token':adminToken}:{};const r=await fetch(base()+path,{headers:{'Content-Type':'application/json',...authHeaders,...(init.headers||{})},...init});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}show(d,r.ok);return d}catch(e){show(e.message,false)}}
 async function telegramMethod(method,payload={}){const token=$('botToken').value.trim();if(!token)return show('Enter a Telegram bot token first.',false);const r=await fetch('https://api.telegram.org/bot'+token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show(await r.json(),r.ok)}
 function setWebhook(){return telegramMethod('setWebhook',{url:webhookUrl(),secret_token:$('webhookSecret').value.trim(),allowed_updates:['message','callback_query']})}
 function saveBotToken(){return api('/telegram/config',{method:'POST',body:JSON.stringify({token:$('botToken').value.trim(),webhookSecret:$('webhookSecret').value.trim()||undefined,webhookUrl:webhookUrl()})})}
@@ -1559,8 +1631,15 @@ const url=new URL(request.url);
 
 const path=url.pathname;
 
-if(path==="/" || path==="/admin")
+if(path==="/" || path==="/admin"){
+const token=configAuthToken(env);
+if(!token)
+return json({error:"Admin console disabled until ADMIN_TOKEN or CONFIG_ADMIN_TOKEN is configured."},503);
+const supplied=url.searchParams.get("adminToken");
+if(supplied!==token && !isAuthorizedConfigRequest(request,env))
+return json({error:"Unauthorized admin console request. Add ?adminToken=... or send Bearer/X-Admin-Token."},401);
 return new Response(adminPage(),{headers:{"Content-Type":"text/html; charset=utf-8"}});
+}
 
 
 
@@ -1670,7 +1749,7 @@ await persistQueueEntry(env,aiEntry);
 arena.queue.push(aiEntry);
 }
 
-const resolved=await resolveArena(arena);
+const resolved=await resolveArena(arena,env);
 await saveArena(env,arena);
 
 return json({status:"queued",entry,resolved,queueDepth:arena.queue.length,latestBattle:arena.history[0] ?? null},201);
