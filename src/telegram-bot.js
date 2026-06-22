@@ -253,6 +253,34 @@ function withMainMenu(payload) {
   return { ...payload, reply_markup: mainMenuKeyboard() };
 }
 
+function screenKeyboard(rows = []) {
+  return {
+    inline_keyboard: [
+      ...rows,
+      [{ text: "🏠 Main Menu", callback_data: "nav:home" }]
+    ]
+  };
+}
+
+async function sendOrEdit(env, chatId, text, replyMarkup, editMessageId = null) {
+  const payload = { chat_id: chatId, text, reply_markup: replyMarkup };
+  if (editMessageId) {
+    return telegram(env, "editMessageText", { ...payload, message_id: editMessageId });
+  }
+  return telegram(env, "sendMessage", payload);
+}
+
+async function showHome(env, chatId, session, editMessageId = null) {
+  const text = [
+    "🥷 Emoji Jutsu command room",
+    session?.playerId ? `Player ID: ${session.playerId}` : null,
+    session?.lastCombo ? `Last sealed: ${session.lastCombo}` : "No sealed technique yet.",
+    "",
+    "Tap a button below. Everything happens here in chat — no mini app required."
+  ].filter(Boolean).join("\n");
+  return sendOrEdit(env, chatId, text, mainMenuKeyboard(), editMessageId);
+}
+
 function createdAt() {
   return Date.now();
 }
@@ -323,6 +351,7 @@ function castKeyboard(gestures, combo = []) {
     { text: "⌫", callback_data: "cast:back" },
     { text: "Reset", callback_data: "cast:reset" }
   ]);
+  rows.push([{ text: "🏠 Main Menu", callback_data: "nav:home" }]);
   return { inline_keyboard: rows };
 }
 
@@ -479,7 +508,7 @@ async function sendDuelPrompt(env, chatId, session, messageId = null) {
     text: `Duel mode armed with ${session.lastCombo || "your next sealed technique"}.
 
 Paste an opponent combo ending in ${FINISHER}, or send a rival player ID.`,
-    reply_markup: { inline_keyboard: [[{ text: "Cancel", callback_data: "nav:cancel" }]] }
+    reply_markup: screenKeyboard([[{ text: "Cancel", callback_data: "nav:cancel" }]])
   };
   if (messageId) return telegram(env, "editMessageText", { ...payload, message_id: messageId });
   return telegram(env, "sendMessage", payload);
@@ -510,6 +539,32 @@ async function runDuel(request, env, chatId, session, opponentArg) {
   return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: duelText }));
 }
 
+async function showArena(request, env, chatId, editMessageId = null) {
+  const arena = await callWorkerJson(request, "/arena");
+  return sendOrEdit(env, chatId, formatArena(arena.data), screenKeyboard([[{ text: "🔄 Refresh Arena", callback_data: "nav:arena" }]]), editMessageId);
+}
+
+async function showButler(request, env, chatId, editMessageId = null) {
+  const butler = await callWorkerJson(request, "/butler");
+  const text = butler.ok
+    ? `AI Butler\nStyle: ${butler.data.preferredStyle}\nWin rate: ${butler.data.winRate}\nNext: ${butler.data.nextCombo}`
+    : `AI Butler is unavailable: ${butler.data?.error || "temporarily unavailable"}`;
+  return sendOrEdit(env, chatId, text, screenKeyboard([[{ text: "🔄 Refresh Butler", callback_data: "nav:butler" }]]), editMessageId);
+}
+
+async function showProfile(request, env, chatId, session, editMessageId = null) {
+  const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
+  const p = stats.data.player || {};
+  const text = `Profile ${p.username || session.username}\nID: ${session.playerId}\n${p.wins || 0}W/${p.losses || 0}L/${p.draws || 0}D\nXP: ${p.xp || 0}\nPoints: ${p.points || 0}`;
+  return sendOrEdit(env, chatId, text, screenKeyboard([[{ text: STATIC_BUTTONS.myjutsu, callback_data: "nav:myjutsu" }]]), editMessageId);
+}
+
+async function showMyJutsu(request, env, chatId, session, editMessageId = null) {
+  const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
+  const list = (stats.data.signature_jutsu || []).slice(0, 10).map(j => `• ${j.name}: ${j.combo}`).join("\n") || "No saved signatures yet.";
+  return sendOrEdit(env, chatId, list, screenKeyboard([[{ text: STATIC_BUTTONS.cast, callback_data: "nav:cast" }]]), editMessageId);
+}
+
 async function handleMessage(request, env, message) {
   const chat = message.chat;
   const textBody = (message.text || "").trim();
@@ -526,7 +581,7 @@ async function handleMessage(request, env, message) {
   }
 
   if (command === "/start" || command === "/help" || command === STATIC_BUTTONS.help) {
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: commandList(session.playerId) }));
+    return showHome(env, chat.id, session);
   }
 
   if (command === "/cast" || command === STATIC_BUTTONS.cast) return showCast(request, env, chat.id);
@@ -538,25 +593,19 @@ async function handleMessage(request, env, message) {
   }
 
   if (command === "/arena" || command === STATIC_BUTTONS.arena) {
-    const arena = await callWorkerJson(request, "/arena");
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: formatArena(arena.data) }));
+    return showArena(request, env, chat.id);
   }
 
   if (command === "/butler" || command === STATIC_BUTTONS.butler) {
-    const butler = await callWorkerJson(request, "/butler");
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `AI Butler\nStyle: ${butler.data.preferredStyle}\nWin rate: ${butler.data.winRate}\nNext: ${butler.data.nextCombo}` }));
+    return showButler(request, env, chat.id);
   }
 
   if (command === "/profile" || command === STATIC_BUTTONS.profile) {
-    const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
-    const p = stats.data.player || {};
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Profile ${p.username || session.username}\nID: ${session.playerId}\n${p.wins || 0}W/${p.losses || 0}L/${p.draws || 0}D\nXP: ${p.xp || 0}\nPoints: ${p.points || 0}` }));
+    return showProfile(request, env, chat.id, session);
   }
 
   if (command === "/myjutsu" || command === STATIC_BUTTONS.myjutsu) {
-    const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
-    const list = (stats.data.signature_jutsu || []).slice(0, 10).map(j => `• ${j.name}: ${j.combo}`).join("\n") || "No saved signatures yet.";
-    return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: list }));
+    return showMyJutsu(request, env, chat.id, session);
   }
 
   if (command === "/duel" || command === STATIC_BUTTONS.duel) {
@@ -566,7 +615,7 @@ async function handleMessage(request, env, message) {
     return runDuel(request, env, chat.id, session, opponentArg);
   }
 
-  return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Unknown action. Tap ${STATIC_BUTTONS.help}.` }));
+  return telegram(env, "sendMessage", withStaticButtons({ chat_id: chat.id, text: `Unknown action. Tap ${STATIC_BUTTONS.help} or use the menu buttons below.` }));
 }
 
 
@@ -577,6 +626,7 @@ async function handleFrontEndCallback(request, env, callback) {
 
   if (scope === "nav") {
     await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id });
+    if (action === "home") return showHome(env, chatId, session, callback.message.message_id);
     if (action === "cancel") {
       const next = { ...session };
       delete next.mode;
@@ -592,6 +642,11 @@ async function handleFrontEndCallback(request, env, callback) {
       if (!sealed) return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}, or paste a combo and tap Save/Seal.`, reply_markup: mainMenuKeyboard() });
       return queueCombo(request, env, chatId, session, sealed);
     }
+    if (action === "arena") return showArena(request, env, chatId, callback.message.message_id);
+    if (action === "butler") return showButler(request, env, chatId, callback.message.message_id);
+    if (action === "profile") return showProfile(request, env, chatId, session, callback.message.message_id);
+    if (action === "myjutsu") return showMyJutsu(request, env, chatId, session, callback.message.message_id);
+    if (action === "help") return sendOrEdit(env, chatId, commandList(session.playerId), mainMenuKeyboard(), callback.message.message_id);
     const fakeMessage = { chat: callback.message.chat, from: callback.from, text: STATIC_BUTTONS[action] || `/${action}` };
     return handleMessage(request, env, fakeMessage);
   }
