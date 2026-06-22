@@ -1,4 +1,4 @@
-import { handleTelegramWebhook } from "./telegram-bot.js";
+import { handleTelegramConfig, handleTelegramWebhook } from "./telegram-bot.js";
 const FINISHER = "🙏🏻";
 const MAX_HAND_SIGNS = 5;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
@@ -130,6 +130,7 @@ commands:[
 {method:"GET",path:"/arena",description:"View persistent arena queue, history, leaderboard and AI Butler state.",curl:"curl \"$BASE_URL/arena\""},
 {method:"GET",path:"/battle/:id",description:"Replay a completed arena battle from history.",curl:"curl \"$BASE_URL/battle/BATTLE-ID\""},
 {method:"GET",path:"/butler",description:"Inspect the evolving AI Butler opponent and its next combo.",curl:"curl \"$BASE_URL/butler\""},
+{method:"POST",path:"/telegram/config",description:"Save the Telegram bot token in KV and configure the Telegram webhook so the bot can receive updates.",curl:"curl -X POST \"$BASE_URL/telegram/config\" -H \"Content-Type: application/json\" -d '{\"token\":\"123456:ABC...\"}'"},
 {method:"POST",path:"/player/create",description:"Create a persistent D1 player profile.",curl:"curl -X POST \"$BASE_URL/player/create\" -H \"Content-Type: application/json\" -d '{\"name\":\"shinobi\"}'"},
 {method:"GET",path:"/player?id=PLAYER-ID",description:"Load a player profile.",curl:"curl \"$BASE_URL/player?id=PLAYER-ID\""},
 {method:"POST",path:"/jutsu/save",description:"Save a player's signature jutsu.",curl:"curl -X POST \"$BASE_URL/jutsu/save\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"PLAYER-ID\",\"name\":\"Astral Jab\",\"combo\":\"👊🏻🖖🏻🙏🏻\"}'"},
@@ -1206,10 +1207,10 @@ return `<!doctype html>
 <header>
 <span class="pill">🥷 Admin Console</span><span class="pill">🤖 Telegram setup</span><span class="pill">⚔️ Arena controls</span>
 <h1>Emoji Jutsu operations hub</h1>
-<p>Configure the Telegram bot webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. Secrets are only sent from your browser to Telegram or this Worker; they are not stored by this page.</p>
+<p>Configure the Telegram bot token and webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. The token can be saved to Worker KV with the setup button or the /telegram/config curl command.</p>
 </header>
 <main class="grid">
-<section class="card wide"><h2>Connection</h2><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="setWebhook()">Set Telegram webhook</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
+<section class="card wide"><h2>Connection</h2><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
 <section class="card"><h2>Player actions</h2><label>Username</label><input id="username" value="admin-player"><button onclick="createPlayer()">Create player</button><label>Player ID</label><input id="playerId" placeholder="UUID"><div class="actions"><button class="secondary" onclick="getPlayer()">Load player</button><button class="secondary" onclick="getStats()">Stats</button></div></section>
 <section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🏻🖖🏻🙏🏻"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
 <section class="card"><h2>Arena controls</h2><label>Queue player ID</label><input id="queuePlayer" placeholder="player id or anonymous"><label><input id="includeButler" type="checkbox" style="width:auto" checked> Include AI Butler</label><div class="actions"><button onclick="queueCombo()">Queue combo</button><button class="secondary" onclick="loadArena()">Refresh arena</button><button class="secondary" onclick="loadButler()">AI Butler</button></div></section>
@@ -1223,6 +1224,7 @@ function show(data,ok=true){$('status').textContent=ok?'OK':'ERROR';$('status').
 async function api(path,init={}){try{const r=await fetch(base()+path,{headers:{'Content-Type':'application/json',...(init.headers||{})},...init});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}show(d,r.ok);return d}catch(e){show(e.message,false)}}
 async function telegramMethod(method,payload={}){const token=$('botToken').value.trim();if(!token)return show('Enter a Telegram bot token first.',false);const r=await fetch('https://api.telegram.org/bot'+token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show(await r.json(),r.ok)}
 function setWebhook(){return telegramMethod('setWebhook',{url:webhookUrl(),secret_token:$('webhookSecret').value.trim(),allowed_updates:['message','callback_query']})}
+function saveBotToken(){return api('/telegram/config',{method:'POST',body:JSON.stringify({token:$('botToken').value.trim(),webhookSecret:$('webhookSecret').value.trim()||undefined,webhookUrl:webhookUrl()})})}
 function createPlayer(){return api('/player/create',{method:'POST',body:JSON.stringify({username:$('username').value})})}function getPlayer(){return api('/player?id='+encodeURIComponent($('playerId').value))}function getStats(){return api('/stats?id='+encodeURIComponent($('playerId').value))}
 function lookup(){return api('/lookup?combo='+encodeURIComponent($('combo').value))}function analyze(){return api('/analyze?combo='+encodeURIComponent($('combo').value))}function saveJutsu(){return api('/jutsu/save',{method:'POST',body:JSON.stringify({playerId:$('playerId').value,name:$('jutsuName').value,combo:$('combo').value})})}
 function queueCombo(){return api('/queue',{method:'POST',body:JSON.stringify({playerId:$('queuePlayer').value||$('playerId').value||'anonymous',combo:$('combo').value,includeButler:$('includeButler').checked})})}function loadArena(){return api('/arena')}function loadButler(){return api('/butler')}
@@ -1316,6 +1318,9 @@ if(path==="/" || path==="/admin")
 return new Response(adminPage(),{headers:{"Content-Type":"text/html; charset=utf-8"}});
 
 
+
+if(path==="/telegram/config")
+return handleTelegramConfig(request,env);
 
 if(path==="/telegram/webhook")
 return handleTelegramWebhook(request,env);
