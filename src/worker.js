@@ -1,4 +1,6 @@
 import { handleTelegramConfig, handleTelegramWebhook } from "./telegram-bot.js";
+const APP_NAME = "emoji-alchemy-worker";
+const APP_VERSION = "1.1.0";
 const FINISHER = "🙏🏻";
 const MAX_HAND_SIGNS = 5;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
@@ -174,6 +176,7 @@ usage:[
 
 commands:[
 {method:"GET",path:"/help",description:"Show this command guide with curl examples.",curl:"curl \"$BASE_URL/help\""},
+{method:"GET",path:"/about",description:"Show service identity and current application version.",curl:"curl \"$BASE_URL/about\""},
 {method:"GET",path:"/lookup?combo=👊🏻🖖🏻🙏🏻",description:"Cast a sealed technique and receive its generated name, rank, stats and battle style.",curl:"curl \"$BASE_URL/lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/analyze?combo=👊🏻🖖🏻🙏🏻",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/gestures",description:"List every available hand sign and its ATK, DEF, SPC and force type.",curl:"curl \"$BASE_URL/gestures\""},
@@ -1684,6 +1687,16 @@ return getStats(request,env);
 
 if(path==="/help")
 return json(CODEX.help);
+
+
+
+if(path==="/about")
+return json({
+name:APP_NAME,
+version:APP_VERSION,
+description:"Emoji Jutsu deterministic combat API",
+availableCommandsUrl:"/help"
+});
 
 
 
