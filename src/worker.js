@@ -6,6 +6,27 @@ const FORCE_ADVANTAGE_BONUS = 18;
 const FORCE_ADVANTAGE_SCALE = 0.08;
 const LONG_COMBO_RISK_STEP = 5;
 
+const AI_CONFIG_KEY = "cloudflare-ai:config";
+const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const CHRONICLE_SYSTEM_PROMPT = `You are a highly advanced narrative translation engine. Your task is to intercept raw competitive match data (JSON format) and translate it into a highly stylized, dark, mysterious, and epic anime-style chronicle. 
+
+You must strictly adhere to the following narrative and structural rules:
+
+1. TONALITY & LORE:
+   - Use a cryptic, theatrical, and mythic tone (e.g., "the primordial void," "cosmic scale," "blood tribute").
+   - Replace generic player terms: "Player 1" becomes "The First Initiate" and "Player 2" becomes "The Second Follower".
+   - Treat stats, costs, risks, and classes as literal magical elements, universal laws, or physical tolls on the body.
+
+2. DATA INTEGRITY (NO OMISSION):
+   - You must weave EVERY single piece of data from the JSON into the story.
+   - Include: Match ID, Jutsu IDs, hand sign emojis, exact stat distributions (atk, def, spc, power), costs, risks, score modifiers, class advantages, round-by-round damage/scores, and the final winner. Do not summarize or skip numbers.
+
+3. STRUCTURE:
+   - ## Title: An epic name for the battle using data parameters.
+   - ### Section 1: The Combatants & Incantations (Introduce both players, their techniques, hand signs, exact base stats, costs, and casting penalties).
+   - ### Section 2: The Clashing Epochs (A round-by-round breakdown translating damage and execution scores into a narrative clash, explicitly detailing the class advantage mechanics).
+   - ### Section 3: The Final Judgment (The definitive conclusion stating the survivor, their final outcome emoji, and the destruction of the loser).`;
+
 const MEMORY_ARENA = {
 queue:[],
 activeBattles:[],
@@ -163,6 +184,9 @@ commands:[
 {method:"GET",path:"/battle/:id",description:"Replay a completed arena battle from history.",curl:"curl \"$BASE_URL/battle/BATTLE-ID\""},
 {method:"GET",path:"/butler",description:"Inspect the evolving AI Butler opponent and its next combo.",curl:"curl \"$BASE_URL/butler\""},
 {method:"POST",path:"/telegram/config",description:"Save the Telegram bot token in KV and configure the Telegram webhook so the bot can receive updates.",curl:"curl -X POST \"$BASE_URL/telegram/config\" -H \"Content-Type: application/json\" -d '{\"token\":\"123456:ABC...\"}'"},
+{method:"POST",path:"/ai/config",description:"Save the Cloudflare AI API token, account ID, model, and chronicle system prompt in KV for the AI model feature.",curl:"curl -X POST \"$BASE_URL/ai/config\" -H \"Content-Type: application/json\" -d '{\"token\":\"CF_API_TOKEN\",\"accountId\":\"CF_ACCOUNT_ID\",\"model\":\"@cf/meta/llama-3.1-8b-instruct\"}'"},
+{method:"GET",path:"/ai/config",description:"Inspect the configured Cloudflare AI account and model without returning the token.",curl:"curl \"$BASE_URL/ai/config\""},
+{method:"POST",path:"/ai/chronicle",description:"Send raw match JSON to Cloudflare AI and receive a dark anime battle chronicle using the configured model.",curl:"curl -X POST \"$BASE_URL/ai/chronicle\" -H \"Content-Type: application/json\" -d '{\"match\":{\"id\":\"MATCH-123\"},\"rounds\":[],\"winner\":\"Player 1\"}'"},
 {method:"POST",path:"/player/create",description:"Create a persistent D1 player profile.",curl:"curl -X POST \"$BASE_URL/player/create\" -H \"Content-Type: application/json\" -d '{\"name\":\"shinobi\"}'"},
 {method:"GET",path:"/player?id=PLAYER-ID",description:"Load a player profile.",curl:"curl \"$BASE_URL/player?id=PLAYER-ID\""},
 {method:"POST",path:"/jutsu/save",description:"Save a player's signature jutsu.",curl:"curl -X POST \"$BASE_URL/jutsu/save\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"PLAYER-ID\",\"name\":\"Astral Jab\",\"combo\":\"👊🏻🖖🏻🙏🏻\"}'"},
@@ -1255,6 +1279,149 @@ return `${e} ${g.name} → ${outcomeForCast(e)}: +${g.atk} ATK +${g.def} DEF +${
 
 
 
+async function getStoredAiConfig(env){
+
+if(!env?.BOT_SESSIONS)
+return {};
+
+return (await env.BOT_SESSIONS.get(AI_CONFIG_KEY,"json")) || {};
+
+}
+
+
+
+async function getAiConfig(env){
+
+const stored=await getStoredAiConfig(env);
+
+return {
+token:stored.token || env?.CLOUDFLARE_AI_API_TOKEN || env?.CF_AI_API_TOKEN || "",
+accountId:stored.accountId || env?.CLOUDFLARE_ACCOUNT_ID || env?.CF_ACCOUNT_ID || "",
+model:stored.model || env?.CLOUDFLARE_AI_MODEL || env?.CF_AI_MODEL || DEFAULT_CHRONICLE_MODEL,
+systemPrompt:stored.systemPrompt || env?.CHRONICLE_SYSTEM_PROMPT || CHRONICLE_SYSTEM_PROMPT,
+updatedAt:stored.updatedAt || null
+};
+
+}
+
+
+
+function redactAiConfig(config){
+
+return {
+configured:Boolean(config.token && config.accountId && config.model),
+hasToken:Boolean(config.token),
+accountId:config.accountId,
+model:config.model,
+systemPrompt:config.systemPrompt,
+updatedAt:config.updatedAt
+};
+
+}
+
+
+
+async function handleAiConfig(request,env){
+
+if(!env?.BOT_SESSIONS)
+return json({error:"Missing BOT_SESSIONS KV binding"},503);
+
+if(request.method==="GET")
+return json(redactAiConfig(await getAiConfig(env)));
+
+if(request.method!=="POST")
+return json({error:"Use GET or POST /ai/config with JSON body"},405);
+
+let body={};
+try{
+body=await request.json();
+}catch{
+return json({error:"Send JSON with token, accountId, and optional model fields"},400);
+}
+
+const existing=await getStoredAiConfig(env);
+const token=(body.token || body.apiToken || body.cloudflareAiApiToken || existing.token || "").trim();
+const accountId=(body.accountId || body.accountID || body.cloudflareAccountId || existing.accountId || "").trim();
+const model=(body.model || existing.model || DEFAULT_CHRONICLE_MODEL).trim();
+const systemPrompt=(body.systemPrompt || existing.systemPrompt || CHRONICLE_SYSTEM_PROMPT).trim();
+
+if(!token)
+return json({error:"Missing Cloudflare AI API token"},400);
+
+if(!accountId)
+return json({error:"Missing Cloudflare account ID"},400);
+
+if(!model)
+return json({error:"Missing Cloudflare AI model"},400);
+
+const config={token,accountId,model,systemPrompt,updatedAt:new Date().toISOString()};
+await env.BOT_SESSIONS.put(AI_CONFIG_KEY,JSON.stringify(config));
+
+return json({
+ok:true,
+...redactAiConfig(config),
+message:"Cloudflare AI API token, account ID, model, and chronicle system prompt saved. The token is not returned."
+});
+
+}
+
+
+
+async function handleAiChronicle(request,env){
+
+if(request.method!=="POST")
+return json({error:"Use POST /ai/chronicle with raw match JSON"},405);
+
+const config=await getAiConfig(env);
+if(!config.token || !config.accountId)
+return json({error:"Cloudflare AI is not configured. Set it with POST /ai/config."},503);
+
+let matchData;
+try{
+matchData=await request.json();
+}catch{
+return json({error:"Invalid JSON body"},400);
+}
+
+const modelPath=config.model.split("/").map(encodeURIComponent).join("/");
+const response=await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/ai/run/${modelPath}`,{
+method:"POST",
+headers:{
+"Authorization":`Bearer ${config.token}`,
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+messages:[
+{role:"system",content:config.systemPrompt},
+{role:"user",content:JSON.stringify(matchData,null,2)}
+]
+})
+});
+
+let cloudflare;
+const raw=await response.text();
+try{
+cloudflare=raw ? JSON.parse(raw) : {};
+}catch{
+cloudflare={raw};
+}
+
+if(!response.ok)
+return json({error:"Cloudflare AI request failed",status:response.status,detail:cloudflare},502);
+
+const chronicle=cloudflare.result?.response || cloudflare.result?.text || cloudflare.response || cloudflare.result || cloudflare;
+
+return json({
+ok:true,
+model:config.model,
+chronicle,
+cloudflare
+});
+
+}
+
+
+
 
 
 function adminPage(){
@@ -1271,12 +1438,13 @@ return `<!doctype html>
 </head>
 <body>
 <header>
-<span class="pill">🥷 Admin Console</span><span class="pill">🤖 Telegram setup</span><span class="pill">⚔️ Arena controls</span>
+<span class="pill">🥷 Admin Console</span><span class="pill">🤖 Telegram setup</span><span class="pill">🧠 Cloudflare AI</span><span class="pill">⚔️ Arena controls</span>
 <h1>Emoji Jutsu operations hub</h1>
-<p>Configure the Telegram bot token and webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. The token can be saved to Worker KV with the setup button or the /telegram/config curl command.</p>
+<p>Configure the Telegram bot token and webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. The Telegram token and Cloudflare AI token can be saved to Worker KV with setup buttons or curl commands.</p>
 </header>
 <main class="grid">
 <section class="card wide"><h2>Connection</h2><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
+<section class="card wide"><h2>Cloudflare AI chronicle</h2><div class="row"><div><label>Cloudflare account ID</label><input id="cfAccountId" placeholder="account id"></div><div><label>Cloudflare AI model</label><input id="cfModel" value="@cf/meta/llama-3.1-8b-instruct"></div></div><label>Cloudflare AI API token</label><input id="cfToken" type="password" placeholder="API token with Workers AI access"><label>Raw match JSON</label><textarea id="chronicleJson" placeholder='{"match":{"id":"MATCH-123"},"rounds":[],"winner":"Player 1"}'></textarea><div class="actions"><button onclick="saveAiConfig()">Save AI config</button><button class="secondary" onclick="loadAiConfig()">Load AI config</button><button class="good" onclick="chronicle()">Generate chronicle</button></div><p class="small">Curl: <span class="kbd">POST /ai/config</span> stores token/account/model; <span class="kbd">POST /ai/chronicle</span> sends match JSON to the configured model.</p></section>
 <section class="card"><h2>Player actions</h2><label>Username</label><input id="username" value="admin-player"><button onclick="createPlayer()">Create player</button><label>Player ID</label><input id="playerId" placeholder="UUID"><div class="actions"><button class="secondary" onclick="getPlayer()">Load player</button><button class="secondary" onclick="getStats()">Stats</button></div></section>
 <section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🏻🖖🏻🙏🏻"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
 <section class="card"><h2>Arena controls</h2><label>Queue player ID</label><input id="queuePlayer" placeholder="player id or anonymous"><label><input id="includeButler" type="checkbox" style="width:auto" checked> Include AI Butler</label><div class="actions"><button onclick="queueCombo()">Queue combo</button><button class="secondary" onclick="loadArena()">Refresh arena</button><button class="secondary" onclick="loadButler()">AI Butler</button></div></section>
@@ -1291,6 +1459,9 @@ async function api(path,init={}){try{const r=await fetch(base()+path,{headers:{'
 async function telegramMethod(method,payload={}){const token=$('botToken').value.trim();if(!token)return show('Enter a Telegram bot token first.',false);const r=await fetch('https://api.telegram.org/bot'+token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});show(await r.json(),r.ok)}
 function setWebhook(){return telegramMethod('setWebhook',{url:webhookUrl(),secret_token:$('webhookSecret').value.trim(),allowed_updates:['message','callback_query']})}
 function saveBotToken(){return api('/telegram/config',{method:'POST',body:JSON.stringify({token:$('botToken').value.trim(),webhookSecret:$('webhookSecret').value.trim()||undefined,webhookUrl:webhookUrl()})})}
+function saveAiConfig(){return api('/ai/config',{method:'POST',body:JSON.stringify({token:$('cfToken').value.trim(),accountId:$('cfAccountId').value.trim(),model:$('cfModel').value.trim()})})}
+function loadAiConfig(){return api('/ai/config')}
+function chronicle(){let body;try{body=JSON.parse($('chronicleJson').value||'{}')}catch(e){return show('Invalid match JSON: '+e.message,false)}return api('/ai/chronicle',{method:'POST',body:JSON.stringify(body)})}
 function createPlayer(){return api('/player/create',{method:'POST',body:JSON.stringify({username:$('username').value})})}function getPlayer(){return api('/player?id='+encodeURIComponent($('playerId').value))}function getStats(){return api('/stats?id='+encodeURIComponent($('playerId').value))}
 function lookup(){return api('/lookup?combo='+encodeURIComponent($('combo').value))}function analyze(){return api('/analyze?combo='+encodeURIComponent($('combo').value))}function saveJutsu(){return api('/jutsu/save',{method:'POST',body:JSON.stringify({playerId:$('playerId').value,name:$('jutsuName').value,combo:$('combo').value})})}
 function queueCombo(){return api('/queue',{method:'POST',body:JSON.stringify({playerId:$('queuePlayer').value||$('playerId').value||'anonymous',combo:$('combo').value,includeButler:$('includeButler').checked})})}function loadArena(){return api('/arena')}function loadButler(){return api('/butler')}
@@ -1390,6 +1561,12 @@ return handleTelegramConfig(request,env);
 
 if(path==="/telegram/webhook")
 return handleTelegramWebhook(request,env);
+
+if(path==="/ai/config")
+return handleAiConfig(request,env);
+
+if(path==="/ai/chronicle")
+return handleAiChronicle(request,env);
 
 
 
