@@ -8,6 +8,7 @@ const LONG_COMBO_RISK_STEP = 5;
 
 const AI_CONFIG_KEY = "cloudflare-ai:config";
 const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const DEFAULT_CHRONICLE_MAX_TOKENS = 1500;
 const CHRONICLE_SYSTEM_PROMPT = `You are a highly advanced narrative translation engine. Your task is to intercept raw competitive match data (JSON format) and translate it into a highly stylized, dark, mysterious, and epic anime-style chronicle. 
 
 You must strictly adhere to the following narrative and structural rules:
@@ -1299,6 +1300,7 @@ token:stored.token || env?.CLOUDFLARE_AI_API_TOKEN || env?.CF_AI_API_TOKEN || ""
 accountId:stored.accountId || env?.CLOUDFLARE_ACCOUNT_ID || env?.CF_ACCOUNT_ID || "",
 model:stored.model || env?.CLOUDFLARE_AI_MODEL || env?.CF_AI_MODEL || DEFAULT_CHRONICLE_MODEL,
 systemPrompt:stored.systemPrompt || env?.CHRONICLE_SYSTEM_PROMPT || CHRONICLE_SYSTEM_PROMPT,
+maxTokens:Number.parseInt(stored.maxTokens ?? stored.max_tokens ?? env?.CHRONICLE_MAX_TOKENS ?? DEFAULT_CHRONICLE_MAX_TOKENS,10) || DEFAULT_CHRONICLE_MAX_TOKENS,
 updatedAt:stored.updatedAt || null
 };
 
@@ -1314,6 +1316,7 @@ hasToken:Boolean(config.token),
 accountId:config.accountId,
 model:config.model,
 systemPrompt:config.systemPrompt,
+maxTokens:config.maxTokens,
 updatedAt:config.updatedAt
 };
 
@@ -1344,6 +1347,7 @@ const token=(body.token || body.apiToken || body.cloudflareAiApiToken || existin
 const accountId=(body.accountId || body.accountID || body.cloudflareAccountId || existing.accountId || "").trim();
 const model=(body.model || existing.model || DEFAULT_CHRONICLE_MODEL).trim();
 const systemPrompt=(body.systemPrompt || existing.systemPrompt || CHRONICLE_SYSTEM_PROMPT).trim();
+const maxTokens=Number.parseInt(body.maxTokens ?? body.max_tokens ?? existing.maxTokens ?? DEFAULT_CHRONICLE_MAX_TOKENS,10);
 
 if(!token)
 return json({error:"Missing Cloudflare AI API token"},400);
@@ -1354,13 +1358,16 @@ return json({error:"Missing Cloudflare account ID"},400);
 if(!model)
 return json({error:"Missing Cloudflare AI model"},400);
 
-const config={token,accountId,model,systemPrompt,updatedAt:new Date().toISOString()};
+if(!Number.isFinite(maxTokens) || maxTokens<1)
+return json({error:"maxTokens must be a positive integer"},400);
+
+const config={token,accountId,model,systemPrompt,maxTokens,updatedAt:new Date().toISOString()};
 await env.BOT_SESSIONS.put(AI_CONFIG_KEY,JSON.stringify(config));
 
 return json({
 ok:true,
 ...redactAiConfig(config),
-message:"Cloudflare AI API token, account ID, model, and chronicle system prompt saved. The token is not returned."
+message:"Cloudflare AI API token, account ID, model, max tokens, and chronicle system prompt saved. The token is not returned."
 });
 
 }
@@ -1394,7 +1401,8 @@ body:JSON.stringify({
 messages:[
 {role:"system",content:config.systemPrompt},
 {role:"user",content:JSON.stringify(matchData,null,2)}
-]
+],
+max_tokens:config.maxTokens || DEFAULT_CHRONICLE_MAX_TOKENS
 })
 });
 
