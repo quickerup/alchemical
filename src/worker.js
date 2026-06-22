@@ -173,6 +173,40 @@ spc:15
 
 
 
+
+const CHANGELOG = {
+
+title:"Emoji Jutsu Change Log",
+
+summary:"Recent product and API updates for the Emoji Jutsu worker.",
+
+source:"CHANGELOG.md",
+
+entries:[
+{
+version:"1.1.0",
+date:"2026-06-22",
+title:"Public change log",
+changes:[
+"Added GET /changelog so players and operators can inspect recent feature updates as JSON.",
+"Linked the change log from /help and the admin console system shortcuts for easier discovery.",
+"Documented the initial operational features already available in the worker, including the admin console, Telegram setup, Cloudflare AI chronicle generation, arena matchmaking, player profiles, signature jutsu, deterministic duels, and replay helpers."
+]
+},
+{
+version:"1.0.0",
+date:"2026-06-01",
+title:"Initial public API",
+changes:[
+"Launched deterministic emoji technique lookup, analysis, duel simulation, replay, training, rules, and gesture catalog endpoints.",
+"Added persistent arena queue, battle history, leaderboard, adaptive AI Butler, D1 player profiles, and signature jutsu storage.",
+"Added Telegram bot webhook handling plus configurable Cloudflare AI battle chronicles."
+]
+}
+]
+
+};
+
 const CODEX={
 
 
@@ -192,6 +226,7 @@ usage:[
 
 commands:[
 {method:"GET",path:"/help",description:"Show this command guide with curl examples.",curl:"curl \"$BASE_URL/help\""},
+{method:"GET",path:"/changelog",description:"Show recent API and product changes.",curl:"curl \"$BASE_URL/changelog\""},
 {method:"GET",path:"/about",description:"Show service identity and current application version.",curl:"curl \"$BASE_URL/about\""},
 {method:"GET",path:"/lookup?combo=👊🏻🖖🏻🙏🏻",description:"Cast a sealed technique and receive its generated name, rank, stats and battle style.",curl:"curl \"$BASE_URL/lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/analyze?combo=👊🏻🖖🏻🙏🏻",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
@@ -1549,13 +1584,13 @@ return `<!doctype html>
 <p>Configure the Telegram bot token and webhook, inspect game state, create players, save jutsu, queue battles, simulate duels, and review bot/player data from one static page. The Telegram token and Cloudflare AI token can be saved to Worker KV with setup buttons or curl commands.</p>
 </header>
 <main class="grid">
-<section class="card wide"><h2>Connection</h2><label>Admin token</label><input id="adminToken" type="password" placeholder="ADMIN_TOKEN for config changes"><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
+<section class="card wide"><h2>Connection</h2><label>Admin token</label><input id="adminToken" type="password" placeholder="ADMIN_TOKEN for config changes"><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a><a class="button secondary" href="/changelog" target="_blank">Open change log</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
 <section class="card wide"><h2>Cloudflare AI chronicle</h2><div class="row"><div><label>Cloudflare account ID</label><input id="cfAccountId" placeholder="account id"></div><div><label>Cloudflare AI model</label><input id="cfModel" value="@cf/meta/llama-3.1-8b-instruct"></div></div><label>Cloudflare AI API token</label><input id="cfToken" type="password" placeholder="API token with Workers AI access"><label>Raw match JSON</label><textarea id="chronicleJson" placeholder='{"match":{"id":"MATCH-123"},"rounds":[],"winner":"Player 1"}'></textarea><div class="actions"><button onclick="saveAiConfig()">Save AI config</button><button class="secondary" onclick="loadAiConfig()">Load AI config</button><button class="good" onclick="chronicle()">Generate chronicle</button></div><p class="small">Curl: <span class="kbd">POST /ai/config</span> stores token/account/model; <span class="kbd">POST /ai/chronicle</span> sends match JSON to the configured model.</p></section>
 <section class="card"><h2>Player actions</h2><label>Username</label><input id="username" value="admin-player"><button onclick="createPlayer()">Create player</button><label>Player ID</label><input id="playerId" placeholder="UUID"><div class="actions"><button class="secondary" onclick="getPlayer()">Load player</button><button class="secondary" onclick="getStats()">Stats</button></div></section>
 <section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🏻🖖🏻🙏🏻"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
 <section class="card"><h2>Arena controls</h2><label>Queue player ID</label><input id="queuePlayer" placeholder="player id or anonymous"><label><input id="includeButler" type="checkbox" style="width:auto" checked> Include AI Butler</label><div class="actions"><button onclick="queueCombo()">Queue combo</button><button class="secondary" onclick="loadArena()">Refresh arena</button><button class="secondary" onclick="loadButler()">AI Butler</button></div></section>
 <section class="card"><h2>Duel simulator</h2><label>Opponent combo</label><input id="opponent" value="✋🏻🤟🏻🙏🏻"><div class="row"><div><label>Player A ID (optional)</label><input id="playerA"></div><div><label>Player B ID (optional)</label><input id="playerB"></div></div><button onclick="simulate()">Run duel</button></section>
-<section class="card wide"><h2>System shortcuts</h2><div class="actions"><button class="secondary" onclick="api('/gestures')">Gestures</button><button class="secondary" onclick="api('/rules')">Rules</button><button class="secondary" onclick="api('/train')">Training</button><button class="secondary" onclick="api('/queue')">Queue</button></div></section>
+<section class="card wide"><h2>System shortcuts</h2><div class="actions"><button class="secondary" onclick="api('/gestures')">Gestures</button><button class="secondary" onclick="api('/rules')">Rules</button><button class="secondary" onclick="api('/train')">Training</button><button class="secondary" onclick="api('/changelog')">Change log</button><button class="secondary" onclick="api('/queue')">Queue</button></div></section>
 <section class="card wide"><h2>Result <span id="status" class="status"></span></h2><pre id="result" class="result">Ready.</pre></section>
 </main>
 <script>
