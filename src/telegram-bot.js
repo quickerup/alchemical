@@ -511,7 +511,15 @@ async function queueCombo(request, env, chatId, session, sealed) {
   }
   const queued = await callWorkerJson(request, "/queue", { method: "POST", body: JSON.stringify({ playerId: session.playerId, combo: sealed, includeButler: true }) });
   const entryName = queued.data?.entry?.name || validation.data?.name || sealed;
-  return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: queued.ok ? `Queued ${entryName}. Resolved battles: ${queued.data.resolved ?? 0}` : `Queue failed: ${queued.data.error || "temporarily unavailable"}` }));
+  await telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: queued.ok ? `Queued ${entryName}. Resolved battles: ${queued.data.resolved ?? 0}` : `Queue failed: ${queued.data.error || "temporarily unavailable"}` }));
+  if (queued.ok && queued.data?.latestBattle && queued.data.resolved > 0) await sendChronicleFollowup(request, env, chatId, queued.data.latestBattle);
+}
+
+async function sendChronicleFollowup(request, env, chatId, matchData) {
+  const chronicle = await callWorkerJson(request, "/ai/chronicle", { method: "POST", body: JSON.stringify(matchData) });
+  if (!chronicle.ok || !chronicle.data?.chronicle) return null;
+  const text = String(chronicle.data.chronicle).slice(0, 3900);
+  return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `📜 Chronicle of the Duel\n\n${text}` }));
 }
 
 async function sendDuelPrompt(env, chatId, session, messageId = null) {
@@ -549,7 +557,8 @@ async function runDuel(request, env, chatId, session, opponentArg) {
       ...duel.data.rounds.map(r => `${r.attacker}: ${r.damage}`)
     ].join("\n")
     : `Duel failed: ${duel.data.error}`;
-  return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: duelText }));
+  await telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: duelText }));
+  if (duel.ok) await sendChronicleFollowup(request, env, chatId, duel.data);
 }
 
 async function showArena(request, env, chatId, editMessageId = null) {

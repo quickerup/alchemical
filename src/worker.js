@@ -8,6 +8,9 @@ const FORCE_ADVANTAGE_BONUS = 18;
 const FORCE_ADVANTAGE_SCALE = 0.08;
 const LONG_COMBO_RISK_STEP = 5;
 const AI_BUTLER_HISTORY_LIMIT = 100;
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+const DUEL_RATE_LIMIT = 30;
+const CHRONICLE_RATE_LIMIT = 10;
 
 const AI_CONFIG_KEY = "cloudflare-ai:config";
 const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
@@ -55,7 +58,8 @@ return {mode:"kv",durable:true,warning:null};
 return {
 mode:"memory",
 durable:false,
-warning:"ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted."
+warning:"ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
+productionError:"ARENA_KV must be bound in production; memory fallback is development-only and loses live matchmaking state."
 };
 
 }
@@ -152,6 +156,14 @@ return Object.fromEntries(Object.keys(GESTURES).map(gesture=>[gesture,outcomeFor
 
 
 
+const ELEMENTAL_ULTIMATES={
+"🤜🏻🤛🏻✊🏻👊🏻🖕🏻":{name:"Meteor Fang Cataclysm",element:"Inferno",atk:28,def:0,spc:7},
+"🤚🏻🖐🏻✋🏻👐🏻🤲🏻":{name:"World-Turtle Aegis",element:"Terra",atk:0,def:32,spc:4},
+"🖖🏻🤟🏻🤞🏻✌🏻☝🏻":{name:"Celestial Mystic Seal",element:"Astral",atk:4,def:4,spc:32},
+"👏🏻🙌🏻🫶🏻🫴🏻👌🏻":{name:"Aurora Heart Mandala",element:"Luminous",atk:6,def:14,spc:24},
+"👉🏻👈🏻👆🏻👇🏻🫵🏻":{name:"Five-Point Thunder Sentence",element:"Storm",atk:22,def:5,spc:15}
+};
+
 const FINISHERS={
 
 "👊🏻":{
@@ -232,6 +244,7 @@ commands:[
 {method:"GET",path:"/analyze?combo=👊🏻🖖🏻🙏🏻",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/gestures",description:"List every available hand sign and its ATK, DEF, SPC and force type.",curl:"curl \"$BASE_URL/gestures\""},
 {method:"GET",path:"/rules",description:"Read the deterministic combat rules, force triangle, finisher rules and replay guarantees.",curl:"curl \"$BASE_URL/rules\""},
+{method:"GET",path:"/balance/simulate?maxLength=3",description:"Run the deterministic balance simulator over every 1-N gesture combo and report class/length win rates plus dominant combos.",curl:"curl \"$BASE_URL/balance/simulate?maxLength=3\""},
 {method:"GET",path:"/duel?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻🤟🏻🙏🏻",description:"Compare two sealed techniques and return the winner, damage, scores and force analysis.",curl:"curl \"$BASE_URL/duel?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%A4%9F%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/simulate?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻",description:"Run a deterministic duel that can be replayed from the same inputs.",curl:"curl \"$BASE_URL/simulate?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%AB%90%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
 {method:"GET",path:"/replay?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻&matchId=MATCH-123",description:"Verify a previous deterministic match by passing the same combos and match id.",curl:"curl \"$BASE_URL/replay?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%AB%90%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&matchId=MATCH-123\""},
@@ -493,7 +506,13 @@ const repetitionPenalty=(combo.length-uniqueSigns)*4;
 const diversityBonus=uniqueSigns*2;
 const complexityBonus=Math.max(0,combo.length-2)*2;
 const longComboRisk=Math.max(0,combo.length-3)*LONG_COMBO_RISK_STEP;
-const power=Math.max(1,baseTotal + diversityBonus + complexityBonus - repetitionPenalty);
+const ultimate=ELEMENTAL_ULTIMATES[combo.join("")] || null;
+if(ultimate){
+atk+=ultimate.atk;
+def+=ultimate.def;
+spc+=ultimate.spc;
+}
+const power=Math.max(1,baseTotal + diversityBonus + complexityBonus - repetitionPenalty + (ultimate ? 30 : 0));
 const cost=Math.ceil(power*0.42 + combo.length*4);
 const risk=Math.max(1,Math.floor((atk*0.24 + spc*0.18) - (def*0.12) + repetitionPenalty + longComboRisk));
 
@@ -507,6 +526,7 @@ class:className,
 power,
 cost,
 risk,
+ultimate,
 modifiers:{
 diversityBonus,
 complexityBonus,
@@ -565,7 +585,7 @@ if(finisher.def) boosted.def+=finisher.def;
 if(finisher.spc) boosted.spc+=finisher.spc;
 
 boosted.finisher=finisher.name;
-boosted.power=boosted.atk+boosted.def+boosted.spc + (boosted.modifiers?.diversityBonus ?? 0) + (boosted.modifiers?.complexityBonus ?? 0) - (boosted.modifiers?.repetitionPenalty ?? 0);
+boosted.power=boosted.atk+boosted.def+boosted.spc + (boosted.ultimate ? 30 : 0) + (boosted.modifiers?.diversityBonus ?? 0) + (boosted.modifiers?.complexityBonus ?? 0) - (boosted.modifiers?.repetitionPenalty ?? 0);
 boosted.cost=Math.ceil(boosted.power*0.42);
 boosted.risk=Math.max(1,Math.floor((boosted.atk*0.24 + boosted.spc*0.18) - (boosted.def*0.12) + (boosted.modifiers?.repetitionPenalty ?? 0) + (boosted.modifiers?.longComboRisk ?? 0)));
 
@@ -816,9 +836,15 @@ return updated;
 }
 
 
+function shouldForbidMemoryArena(env){
+return !env?.ARENA_KV && String(env?.ENVIRONMENT || env?.NODE_ENV || "").toLowerCase()==="production";
+}
+
 async function loadArena(env){
 
 const persistence=getArenaPersistenceMode(env);
+if(shouldForbidMemoryArena(env))
+throw new Error(persistence.productionError);
 if(!persistence.durable)
 console.warn(persistence.warning);
 
@@ -839,6 +865,9 @@ return normalizeArena(MEMORY_ARENA);
 
 
 async function saveArena(env,arena){
+
+if(shouldForbidMemoryArena(env))
+throw new Error(getArenaPersistenceMode(env).productionError);
 
 if(env?.ARENA_KV)
 await env.ARENA_KV.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
@@ -1498,6 +1527,10 @@ async function handleAiChronicle(request,env){
 if(request.method!=="POST")
 return json({error:"Use POST /ai/chronicle with raw match JSON"},405);
 
+const limited=await checkRateLimit(env,request,"ai-chronicle",CHRONICLE_RATE_LIMIT);
+if(limited)
+return limited;
+
 const config=await getAiConfig(env);
 if(!config.token || !config.accountId)
 return json({error:"Cloudflare AI is not configured. Set it with POST /ai/config."},503);
@@ -1559,6 +1592,71 @@ chronicle,
 cloudflare
 });
 
+}
+
+function clientRateLimitKey(request,bucket){
+const ip=request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || "local";
+const window=Math.floor(Date.now()/(RATE_LIMIT_WINDOW_SECONDS*1000));
+return `rate:${bucket}:${ip}:${window}`;
+}
+
+async function checkRateLimit(env,request,bucket,limit){
+if(!env?.BOT_SESSIONS)
+return null;
+const key=clientRateLimitKey(request,bucket);
+const current=Number.parseInt(await env.BOT_SESSIONS.get(key) || "0",10);
+if(current>=limit)
+return json({error:"Rate limit exceeded",bucket,limit,windowSeconds:RATE_LIMIT_WINDOW_SECONDS},429);
+await env.BOT_SESSIONS.put(key,String(current+1),{expirationTtl:RATE_LIMIT_WINDOW_SECONDS*2});
+return null;
+}
+
+function sealedComboFromSigns(signs){
+return `${signs.join("")}${FINISHER}`;
+}
+
+async function runBalanceSimulator(maxLength=3){
+const gestures=Object.keys(GESTURES);
+const cappedLength=Math.max(1,Math.min(MAX_HAND_SIGNS,Number(maxLength) || 3));
+const combos=[];
+function walk(prefix,length){
+if(prefix.length===length){
+const parsed=parseTechnique(encodeURIComponent(sealedComboFromSigns(prefix)));
+combos.push({signs:[...prefix],decoded:sealedComboFromSigns(prefix),spell:parsed.spell,name:describeTechnique(parsed.spell),id:`SIM-${combos.length}`});
+return;
+}
+for(const gesture of gestures)
+walk([...prefix,gesture],length);
+}
+for(let length=1;length<=cappedLength;length++)
+walk([],length);
+const stats=new Map();
+for(const combo of combos)
+stats.set(combo.decoded,{combo:combo.decoded,class:combo.spell.class,length:combo.signs.length,wins:0,losses:0,draws:0,battles:0,rank:rank(combo.spell),power:combo.spell.power,ultimate:combo.spell.ultimate?.name || null});
+for(let i=0;i<combos.length;i++){
+for(let j=i+1;j<combos.length;j++){
+const battle=await simulateBattle(combos[i],combos[j],`BAL-${i}-${j}`);
+const a=stats.get(combos[i].decoded);
+const b=stats.get(combos[j].decoded);
+a.battles++;
+b.battles++;
+if(battle.winner==="Player 1"){a.wins++;b.losses++;}
+else if(battle.winner==="Player 2"){b.wins++;a.losses++;}
+else {a.draws++;b.draws++;}
+}
+}
+const entries=[...stats.values()].map(item=>({...item,winRate:item.battles ? Number((item.wins/item.battles).toFixed(4)) : 0}));
+return {
+comboCount:combos.length,
+maxLength:cappedLength,
+classLengthBreakdown:Object.values(entries.reduce((acc,item)=>{
+const key=`${item.class}:${item.length}`;
+acc[key] ||= {class:item.class,length:item.length,wins:0,losses:0,draws:0,battles:0};
+acc[key].wins+=item.wins; acc[key].losses+=item.losses; acc[key].draws+=item.draws; acc[key].battles+=item.battles;
+return acc;
+},{})).map(row=>({...row,winRate:row.battles ? Number((row.wins/row.battles).toFixed(4)) : 0})),
+topCombos:entries.sort((a,b)=>b.winRate-a.winRate || b.power-a.power).slice(0,25)
+};
 }
 
 
@@ -1687,6 +1785,7 @@ forceAdvantage,
 getArenaPersistenceMode,
 parseTechnique,
 scoreDuelist,
+simulateBattle,
 updateAiButlerAfterBattle
 };
 
@@ -1771,6 +1870,9 @@ availableCommandsUrl:"/help"
 
 if(path==="/rules")
 return json(CODEX.rules);
+
+if(path==="/balance/simulate")
+return json(await runBalanceSimulator(url.searchParams.get("maxLength") || 3));
 
 
 
@@ -1897,6 +1999,12 @@ let {decoded,combo,spell,id,name}=parsed;
 
 
 if(path==="/duel" || path==="/simulate" || path==="/replay"){
+
+if(path==="/duel"){
+const limited=await checkRateLimit(env,request,"duel",DUEL_RATE_LIMIT);
+if(limited)
+return limited;
+}
 
 const opponentInput=url.searchParams.get("opponent");
 const opponent=parseTechnique(opponentInput);

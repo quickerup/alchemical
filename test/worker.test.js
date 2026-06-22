@@ -24,7 +24,8 @@ test("arena persistence mode reports volatile memory when ARENA_KV is missing", 
   assert.deepEqual(getArenaPersistenceMode({}), {
     mode: "memory",
     durable: false,
-    warning: "ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted."
+    warning: "ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
+    productionError: "ARENA_KV must be bound in production; memory fallback is development-only and loses live matchmaking state."
   });
 });
 
@@ -61,6 +62,13 @@ test("repetition penalty makes face-rolled combos meaningfully weaker than varie
   assert.equal(varied.modifiers.repetitionPenalty, 0);
   assert.ok(varied.power > repeated.power, `${varied.power} should beat ${repeated.power}`);
   assert.ok(repeated.risk > varied.risk, `${repeated.risk} should exceed ${varied.risk}`);
+});
+
+test("specific gesture trees unlock named elemental ultimates", () => {
+  const spell = buildSpell(["🖖🏻", "🤟🏻", "🤞🏻", "✌🏻", "☝🏻"]);
+  assert.equal(spell.ultimate.name, "Celestial Mystic Seal");
+  assert.equal(spell.ultimate.element, "Astral");
+  assert.ok(spell.power > 100);
 });
 
 test("AI Butler keeps enough recent battle history for adaptation metrics", () => {
