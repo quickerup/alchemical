@@ -2,6 +2,12 @@ name = "alchemical"
 main = "src/worker.js"
 compatibility_date = "2025-02-04"
 
+[vars]
+# Replace these placeholder values before deploying, or override them with
+# `wrangler secret put` for sensitive production deployments.
+TELEGRAM_BOT_TOKEN = "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+ADMIN_TOKEN = "REPLACE_WITH_ADMIN_TOKEN"
+
 [observability]
 enabled = true
 
