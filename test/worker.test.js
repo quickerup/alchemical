@@ -20,13 +20,20 @@ const parse = combo => {
   return result.spell;
 };
 
-test("arena persistence mode reports volatile memory when ARENA_KV is missing", () => {
-  assert.deepEqual(getArenaPersistenceMode({ ARENA_KV: { get() {}, put() {} } }), { mode: "kv", durable: true, warning: null });
+test("arena persistence mode uses dedicated ARENA_KV, shared KV_BINDING, then volatile memory", () => {
+  assert.deepEqual(getArenaPersistenceMode({ ARENA_KV: { get() {}, put() {} } }), { mode: "kv", binding: "ARENA_KV", durable: true, warning: null });
+  assert.deepEqual(getArenaPersistenceMode({ KV_BINDING: { get() {}, put() {} } }), {
+    mode: "kv",
+    binding: "KV_BINDING",
+    durable: true,
+    warning: "ARENA_KV is not bound; using KV_BINDING for arena state. Create and bind a dedicated ARENA_KV namespace when you need isolated arena storage."
+  });
   assert.deepEqual(getArenaPersistenceMode({}), {
     mode: "memory",
+    binding: null,
     durable: false,
-    warning: "ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
-    productionError: "ARENA_KV must be bound in production; memory fallback is development-only and loses live matchmaking state."
+    warning: "No KV namespace is bound for arena state; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
+    productionError: "A KV namespace must be bound for production arena state; bind ARENA_KV or KV_BINDING before deploying production traffic."
   });
 });
 

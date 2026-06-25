@@ -22,7 +22,8 @@ Players create a technique by combining 1-5 supported hand-sign emoji and sealin
 - Cloudflare Wrangler.
 - Cloudflare account resources configured in `wrangler.toml`:
   - D1 database binding: `DB`
-  - KV namespace bindings: `KV_BINDING`, `BOT_SESSIONS`, and `ARENA_KV`
+  - KV namespace bindings: `KV_BINDING` and `BOT_SESSIONS`
+  - Optional dedicated KV namespace binding: `ARENA_KV` for isolated arena state; when omitted, arena state uses `KV_BINDING`.
 
 ## Getting Started
 
@@ -169,4 +170,4 @@ CHANGELOG.md           Public product/API change log
 - Every technique must end with `🙏🏻`.
 - URL-encode emoji combos when using shell commands.
 - Duel simulations are deterministic: the same combos and match ID reproduce the same result.
-- `ARENA_KV` is required for durable production arena state; memory fallback is development-only and volatile.
+- Durable arena state uses `ARENA_KV` when bound, otherwise it falls back to the existing `KV_BINDING`; memory fallback is development-only and volatile.

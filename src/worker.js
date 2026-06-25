@@ -51,16 +51,29 @@ adaptationLevel:0.1
 }
 };
 
+function arenaKvNamespace(env){
+return env?.ARENA_KV || env?.KV_BINDING || null;
+}
+
 function getArenaPersistenceMode(env){
 
 if(env?.ARENA_KV)
-return {mode:"kv",durable:true,warning:null};
+return {mode:"kv",binding:"ARENA_KV",durable:true,warning:null};
+
+if(env?.KV_BINDING)
+return {
+mode:"kv",
+binding:"KV_BINDING",
+durable:true,
+warning:"ARENA_KV is not bound; using KV_BINDING for arena state. Create and bind a dedicated ARENA_KV namespace when you need isolated arena storage."
+};
 
 return {
 mode:"memory",
+binding:null,
 durable:false,
-warning:"ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
-productionError:"ARENA_KV must be bound in production; memory fallback is development-only and loses live matchmaking state."
+warning:"No KV namespace is bound for arena state; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
+productionError:"A KV namespace must be bound for production arena state; bind ARENA_KV or KV_BINDING before deploying production traffic."
 };
 
 }
@@ -895,7 +908,7 @@ return updated;
 
 
 function shouldForbidMemoryArena(env){
-return !env?.ARENA_KV && String(env?.ENVIRONMENT || env?.NODE_ENV || "").toLowerCase()==="production";
+return !arenaKvNamespace(env) && String(env?.ENVIRONMENT || env?.NODE_ENV || "").toLowerCase()==="production";
 }
 
 async function loadArena(env){
@@ -906,8 +919,9 @@ throw new Error(persistence.productionError);
 if(!persistence.durable)
 console.warn(persistence.warning);
 
-if(env?.ARENA_KV){
-const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
+const arenaKv=arenaKvNamespace(env);
+if(arenaKv){
+const stored=await arenaKv.get(MEMORY_ARENA_KEY,"json");
 if(stored)
 return normalizeArena(stored);
 }
@@ -927,8 +941,9 @@ async function saveArena(env,arena){
 if(shouldForbidMemoryArena(env))
 throw new Error(getArenaPersistenceMode(env).productionError);
 
-if(env?.ARENA_KV)
-await env.ARENA_KV.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
+const arenaKv=arenaKvNamespace(env);
+if(arenaKv)
+await arenaKv.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
 
 await persistAiButlerToD1(env,arena.aiButler);
 

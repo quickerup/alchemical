@@ -19,7 +19,3 @@ binding = "BOT_SESSIONS"
 id = "b14b9bfdb25e42008596447e4d931472"
 preview_id = "<ID_OF_PREVIEW_BOT_SESSIONS_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
 
-[[kv_namespaces]]
-binding = "ARENA_KV"
-id = "f0fb6f3c6ea54a2589ebc6f8b35ab7dd"
-preview_id = "<ID_OF_PREVIEW_ARENA_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
