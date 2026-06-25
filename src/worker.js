@@ -1120,10 +1120,11 @@ const id=crypto.randomUUID();
 
 await env.DB.prepare(`
 INSERT INTO signature_jutsu
-(id, player_id, name, combo, atk, def, spc, class, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+(id, player_id, user_id, name, combo, atk, def, spc, class, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).bind(
 id,
+playerId,
 playerId,
 signatureName,
 decorated.decoded,
