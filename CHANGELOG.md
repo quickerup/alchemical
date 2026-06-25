@@ -2,6 +2,19 @@
 
 All notable Emoji Jutsu worker changes are documented here.
 
+## [1.2.0] - 2026-06-25
+
+### Added
+
+- Added CORS OPTIONS preflight support for API clients.
+- Added `GET /changelog` and `GET /leaderboard` route handling.
+- Added public rate limiting to `GET /balance/simulate`.
+
+### Improved
+
+- Improved Telegram bot gesture caching, lookup preview pruning, cancel handling, typing indicators, and richer arena/profile/jutsu displays.
+- Improved AI Butler combo selection with adaptation and recent-loss awareness.
+
 ## [1.1.0] - 2026-06-22
 
 ### Added

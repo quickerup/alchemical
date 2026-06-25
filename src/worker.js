@@ -1,6 +1,6 @@
 import { handleTelegramConfig, handleTelegramStatus, handleTelegramWebhook } from "./telegram-bot.js";
 const APP_NAME = "emoji-alchemy-worker";
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const FINISHER = "🙏";
 const MAX_HAND_SIGNS = 5;
 const PUBLIC_BALANCE_MAX_LENGTH = 3;
@@ -12,6 +12,7 @@ const AI_BUTLER_HISTORY_LIMIT = 100;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 const DUEL_RATE_LIMIT = 30;
 const CHRONICLE_RATE_LIMIT = 10;
+const BALANCE_SIMULATE_RATE_LIMIT = 5;
 
 const AI_CONFIG_KEY = "cloudflare-ai:config";
 const DEFAULT_CHRONICLE_MODEL = "@cf/meta/llama-3.1-8b-instruct";
@@ -266,6 +267,16 @@ source:"CHANGELOG.md",
 
 entries:[
 {
+version:"1.2.0",
+date:"2026-06-25",
+title:"Telegram polish and leaderboard routes",
+changes:[
+"Added CORS preflight handling, public /changelog, and /leaderboard routes.",
+"Added public rate limiting for /balance/simulate and listed /leaderboard in /help.",
+"Improved Telegram bot previews, arena/profile displays, cancellation, typing indicators, and AI Butler combo selection."
+]
+},
+{
 version:"1.1.0",
 date:"2026-06-22",
 title:"Public change log",
@@ -321,6 +332,7 @@ commands:[
 {method:"GET",path:"/train",description:"Get a step-by-step starter lesson for building a combo.",curl:"curl \"$BASE_URL/train\""},
 {method:"POST",path:"/queue",description:"Submit a sealed technique into the asynchronous arena queue.",curl:"curl -X POST \"$BASE_URL/queue\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"shinobi\",\"combo\":\"👊🖖🙏\",\"includeButler\":true}'"},
 {method:"GET",path:"/arena",description:"View persistent arena queue, history, leaderboard and AI Butler state.",curl:"curl \"$BASE_URL/arena\""},
+{method:"GET",path:"/leaderboard",description:"View ranked arena leaders with records and win rates.",curl:"curl \"$BASE_URL/leaderboard\""},
 {method:"GET",path:"/battle/:id",description:"Replay a completed arena battle from history.",curl:"curl \"$BASE_URL/battle/BATTLE-ID\""},
 {method:"GET",path:"/butler",description:"Inspect the evolving AI Butler opponent and its next combo.",curl:"curl \"$BASE_URL/butler\""},
 {method:"POST",path:"/telegram/config",description:"Save the Telegram bot token in KV and configure the Telegram webhook so the bot can receive updates. Requires ADMIN_TOKEN or CONFIG_ADMIN_TOKEN.",curl:"curl -X POST \"$BASE_URL/telegram/config\" -H \"Content-Type: application/json\" -H \"X-Admin-Token: $ADMIN_TOKEN\" -d '{\"token\":\"123456:ABC...\"}'"},
@@ -1288,16 +1300,25 @@ arena.leaderboard[loserId].losses++;
 
 function aiComboForButler(ai){
 
-if(ai.winRate<0.4)
-return "✋👐🤲🙏";
+const winRate=Number(ai?.winRate ?? 0.5);
+const adaptation=Number(ai?.adaptationLevel ?? 0);
+const style=ai?.preferredStyle || "Mystic";
+const history=Array.isArray(ai?.history) ? ai.history : [];
+const recentlyLost=history.slice(0,3).some(entry=>entry.winner && entry.winner!==ai.id);
 
-if(ai.preferredStyle==="Kinetic")
-return "👊🤜✊🙏";
+if(winRate<0.35 || (recentlyLost && adaptation>0.35))
+return "✋👐🤲🖐🙏";
 
-if(ai.preferredStyle==="Barrier")
-return "✋🤚👐🙏";
+if(style==="Kinetic")
+return adaptation>0.6 ? "👊🤜✊🖕🙏" : "👊🤜✊🙏";
 
-return "🖖🤞🤟🙏";
+if(style==="Barrier")
+return adaptation>0.6 ? "✋🤚👐🤲🙏" : "✋🤚👐🙏";
+
+if(style==="Mystic")
+return adaptation>0.6 ? "🖖🤞🤟☝🙏" : "🖖🤞🤟🙏";
+
+return winRate>0.65 ? "👉👈👆👇🫵🙏" : "🖖🤞🤟🙏";
 
 }
 
@@ -1828,6 +1849,15 @@ isSystemCommand:data.isSystemCommand ?? status!==404
 
 
 
+function corsHeaders(){
+return {
+"Access-Control-Allow-Origin":"*",
+"Access-Control-Allow-Methods":"GET,POST,OPTIONS",
+"Access-Control-Allow-Headers":"Content-Type, Authorization, X-Admin-Token, X-Telegram-Bot-Api-Secret-Token",
+"Access-Control-Max-Age":"86400"
+};
+}
+
 function json(data,status=200){
 
 return new Response(
@@ -1837,7 +1867,7 @@ JSON.stringify(withResponseHelp(data,status),null,2),
 {
 status,
 headers:{
-"Access-Control-Allow-Origin":"*",
+...corsHeaders(),
 "Content-Type":"application/json"
 }
 }
@@ -1878,6 +1908,9 @@ const url=new URL(request.url);
 
 
 const path=url.pathname;
+
+if(request.method==="OPTIONS")
+return new Response(null,{status:204,headers:corsHeaders()});
 
 if(path==="/" || path==="/admin"){
 const token=configAuthToken(env);
@@ -1933,6 +1966,9 @@ return getStats(request,env);
 if(path==="/help")
 return json(CODEX.help);
 
+if(path==="/changelog")
+return json(CHANGELOG);
+
 
 
 if(path==="/about")
@@ -1949,6 +1985,11 @@ if(path==="/rules")
 return json(CODEX.rules);
 
 if(path==="/balance/simulate"){
+if(!isAuthorizedConfigRequest(request,env)){
+const limited=await checkRateLimit(env,request,"balance-simulate",BALANCE_SIMULATE_RATE_LIMIT);
+if(limited)
+return limited;
+}
 const maxLength=url.searchParams.get("maxLength") || 3;
 const requestedLength=Number(maxLength) || 3;
 const limit=isAuthorizedConfigRequest(request,env) ? MAX_HAND_SIGNS : PUBLIC_BALANCE_MAX_LENGTH;
@@ -1964,8 +2005,13 @@ return json(CODEX.train);
 
 
 
-if(path==="/arena" || path==="/butler" || path.startsWith("/battle/") || path==="/queue"){
+if(path==="/arena" || path==="/leaderboard" || path==="/butler" || path.startsWith("/battle/") || path==="/queue"){
 const arena=await loadArena(env);
+
+const rankedLeaderboard=Object.values(arena.leaderboard).map(row=>({
+...row,
+winRate:row.battles ? Number((row.wins/row.battles).toFixed(4)) : 0
+})).sort((a,b)=>b.wins-a.wins || b.winRate-a.winRate || a.losses-b.losses);
 
 if(path==="/arena")
 return json({
@@ -1973,8 +2019,15 @@ persistence:getArenaPersistenceMode(env),
 queue:arena.queue,
 activeBattles:arena.activeBattles,
 history:arena.history.slice(0,25),
-leaderboard:Object.values(arena.leaderboard).sort((a,b)=>b.wins-a.wins || a.losses-b.losses),
+leaderboard:rankedLeaderboard,
 aiButler:arena.aiButler
+});
+
+if(path==="/leaderboard")
+return json({
+persistence:getArenaPersistenceMode(env),
+leaderboard:rankedLeaderboard,
+count:rankedLeaderboard.length
 });
 
 if(path==="/butler")
