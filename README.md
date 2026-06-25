@@ -139,6 +139,12 @@ curl -X POST "$BASE_URL/telegram/config" \
   -d '{"token":"123456:ABC...","webhookSecret":"secret-value"}'
 ```
 
+Check Telegram bot health without returning the token:
+
+```sh
+curl "$BASE_URL/telegram/status" -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
 Configure Cloudflare AI chronicles:
 
 ```sh

@@ -101,6 +101,31 @@ async function telegram(env, method, payload) {
   return response.json();
 }
 
+async function telegramStatusCall(env, method, payload = {}) {
+  try {
+    const data = await telegram(env, method, payload);
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+function redactBotUser(user) {
+  if (!user || typeof user !== "object") return null;
+  return {
+    id: user.id,
+    is_bot: user.is_bot,
+    first_name: user.first_name,
+    username: user.username,
+    can_join_groups: user.can_join_groups,
+    can_read_all_group_messages: user.can_read_all_group_messages,
+    supports_inline_queries: user.supports_inline_queries
+  };
+}
+
+function telegramDate(seconds) {
+  return seconds ? new Date(seconds * 1000).toISOString() : null;
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -743,6 +768,69 @@ export async function handleTelegramConfig(request, env) {
     transmutationDeleteDelayMs,
     message: "Telegram bot token saved and webhook configured. The token is not returned."
   });
+}
+
+export async function handleTelegramStatus(request, env) {
+  if (!isAuthorizedConfigRequest(request, env)) return json({ error: "Unauthorized. Set ADMIN_TOKEN and send it as Bearer or X-Admin-Token." }, 401);
+  if (request.method !== "GET") return json({ error: "Use GET /telegram/status" }, 405);
+
+  const stored = await getStoredTelegramConfig(env);
+  const config = await getBotConfig(env);
+  const hasToken = Boolean(config.token);
+  const hasWebhookSecret = Boolean(config.webhookSecret);
+  const hasBotSessions = Boolean(env?.BOT_SESSIONS);
+  const tokenSource = stored.token ? "kv" : env?.TELEGRAM_BOT_TOKEN ? "env" : "missing";
+  const webhookSecretSource = stored.webhookSecret ? "kv" : env?.TELEGRAM_WEBHOOK_SECRET ? "env" : "missing";
+  const expectedWebhookUrl = `${new URL(request.url).origin}/telegram/webhook`;
+
+  if (!hasToken) {
+    return json({
+      ok: false,
+      status: "not_configured",
+      configured: { hasToken, tokenSource, hasWebhookSecret, webhookSecretSource, hasBotSessions },
+      expectedWebhookUrl,
+      diagnosis: ["Missing Telegram bot token. Configure it with POST /telegram/config or TELEGRAM_BOT_TOKEN."],
+      tokenReturned: false
+    }, 503);
+  }
+
+  const [bot, webhook] = await Promise.all([
+    telegramStatusCall(env, "getMe"),
+    telegramStatusCall(env, "getWebhookInfo")
+  ]);
+  const webhookResult = webhook.data?.result || null;
+  const issues = [];
+
+  if (!hasWebhookSecret) issues.push("Missing Telegram webhook secret. Configure it with POST /telegram/config or TELEGRAM_WEBHOOK_SECRET.");
+  if (!hasBotSessions) issues.push("Missing BOT_SESSIONS KV binding; webhook sessions and runtime Telegram config cannot persist.");
+  if (!bot.ok) issues.push(`getMe failed: ${bot.error}`);
+  if (!webhook.ok) issues.push(`getWebhookInfo failed: ${webhook.error}`);
+  if (webhookResult) {
+    if (!webhookResult.url) issues.push("Telegram has no webhook URL configured.");
+    else if (webhookResult.url !== expectedWebhookUrl) issues.push(`Telegram webhook URL is ${webhookResult.url}, expected ${expectedWebhookUrl}.`);
+    if (webhookResult.last_error_message) issues.push(`Telegram reports last webhook error: ${webhookResult.last_error_message}`);
+  }
+
+  return json({
+    ok: issues.length === 0,
+    status: issues.length === 0 ? "healthy" : "attention_required",
+    configured: { hasToken, tokenSource, hasWebhookSecret, webhookSecretSource, hasBotSessions },
+    expectedWebhookUrl,
+    bot: { ok: bot.ok, user: redactBotUser(bot.data?.result), error: bot.error || null },
+    webhook: {
+      ok: webhook.ok,
+      url: webhookResult?.url || "",
+      matchesExpectedUrl: webhookResult ? webhookResult.url === expectedWebhookUrl : false,
+      pendingUpdateCount: webhookResult?.pending_update_count ?? null,
+      lastErrorDate: telegramDate(webhookResult?.last_error_date),
+      lastErrorMessage: webhookResult?.last_error_message || null,
+      maxConnections: webhookResult?.max_connections ?? null,
+      allowedUpdates: webhookResult?.allowed_updates || [],
+      error: webhook.error || null
+    },
+    diagnosis: issues,
+    tokenReturned: false
+  }, issues.length === 0 ? 200 : 502);
 }
 
 export async function handleTelegramWebhook(request, env) {
