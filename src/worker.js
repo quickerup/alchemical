@@ -2018,6 +2018,8 @@ async fetch(request,env){
 
 globalThis.__ALCHEMICAL_REQUEST_URL=request.url;
 globalThis.__ALCHEMICAL_REQUEST_METHOD=request.method;
+globalThis.__ALCHEMICAL_WORKER_FETCH=this.fetch.bind(this);
+globalThis.__ALCHEMICAL_WORKER_ENV=env;
 
 
 const url=new URL(request.url);

@@ -219,13 +219,19 @@ async function sendTypingIndicator(env, chatId) {
 }
 
 async function callWorkerJson(request, path, init = {}) {
-  const response = await fetch(workerUrl(request, path), {
+  // Use the worker's own fetch handler directly to avoid Cloudflare 1042 self-fetch errors.
+  const internalFetch = globalThis.__ALCHEMICAL_WORKER_FETCH;
+  const env = globalThis.__ALCHEMICAL_WORKER_ENV;
+  const syntheticRequest = new Request(workerUrl(request, path), {
     ...init,
     headers: {
       "Content-Type": "application/json",
       ...(init.headers || {})
     }
   });
+  const response = internalFetch && env
+    ? await internalFetch(syntheticRequest, env)
+    : await fetch(workerUrl(request, path), { ...init, headers: { "Content-Type": "application/json", ...(init.headers || {}) } });
   const data = await parseResponseBody(response);
   return { ok: response.ok, status: response.status, data };
 }
@@ -600,8 +606,7 @@ function lookupFailureMessage(lookup) {
 function formatLookupFailureText(label, sealed, reason) {
   return [
     `${label}: ${sealed}`,
-    `Technique lookup failed: ${reason || "unknown error"}.`,
-    "No active jutsu was saved. Please try sealing again after fixing the combo or service issue."
+    `Technique lookup failed: ${reason || "unknown error"}.`
   ].join("\n");
 }
 
@@ -973,14 +978,17 @@ ${truncateTelegramText(chronicle.data.chronicle || chronicle.data)}` : `Chronicl
 
   // New: support /api <endpoint> text commands
   if (command.startsWith("/api")) {
-    // Extract the path after '/api'
+    // Extract everything after '/api' as the endpoint path
     let apiPath = command.substring(4).trim();
     if (!apiPath) return showApiMenu(env, chat.id);
+    // Ensure the path starts with a slash
     if (!apiPath.startsWith("/")) apiPath = `/${apiPath}`;
-    // Preserve any additional args as query string if present
+    // Append any additional arguments as they appear (they may include query strings)
     const extra = args.join(" ");
-    if (extra) apiPath += `?${new URLSearchParams({ q: extra })}`;
-    return sendApiEndpoint(request, env, chat.id, apiPath);
+    if (extra) apiPath += ` ${extra}`;
+    // Encode spaces in the final path for a valid URL
+    const encodedPath = apiPath.replace(/\s+/g, "%20");
+    return sendApiEndpoint(request, env, chat.id, encodedPath);
   }
 
   if (textBody.startsWith("/") && !["/start", "/help", "/cancel"].includes(command)) {
