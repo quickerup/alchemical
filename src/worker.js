@@ -135,24 +135,76 @@ const GESTURES = {
 };
 
 const NON_HAND_OUTCOMES = [
-"🔥", "🛡️", "🔮", "⚡", "🌊", "🌪️", "🌋", "🪨", "🌙", "☀️",
-"⭐", "💫", "🌈", "❄️", "🌿", "🍄", "🐉", "🦊", "🐺", "🦅",
-"🐍", "🦂", "🕸️", "💎", "🧲", "🧪", "🪬", "🧿", "🕯️", "🗝️",
-"🧭", "⏳", "🌀", "💥", "☄️", "🌌", "🏔️", "🌧️", "🎭", "🎲"
+{symbol:"🔥",name:"Ember Crown"},
+{symbol:"🛡️",name:"Aegis Ward"},
+{symbol:"🔮",name:"Oracle Lens"},
+{symbol:"⚡",name:"Thunder Brand"},
+{symbol:"🌊",name:"Tidal Verse"},
+{symbol:"🌪️",name:"Cyclone Spiral"},
+{symbol:"🌋",name:"Volcanic Oath"},
+{symbol:"🪨",name:"Stone Root"},
+{symbol:"🌙",name:"Moonlit Veil"},
+{symbol:"☀️",name:"Solar Crest"},
+{symbol:"⭐",name:"Star Sigil"},
+{symbol:"💫",name:"Comet Halo"},
+{symbol:"🌈",name:"Prismatic Bridge"},
+{symbol:"❄️",name:"Frost Rune"},
+{symbol:"🌿",name:"Verdant Thread"},
+{symbol:"🍄",name:"Mycelium Bloom"},
+{symbol:"🐉",name:"Dragon Pulse"},
+{symbol:"🦊",name:"Fox Mirage"},
+{symbol:"🐺",name:"Wolf Howl"},
+{symbol:"🦅",name:"Eagle Ascendant"},
+{symbol:"🐍",name:"Serpent Coil"},
+{symbol:"🦂",name:"Scorpion Sting"},
+{symbol:"🕸️",name:"Spiderweb Snare"},
+{symbol:"💎",name:"Diamond Core"},
+{symbol:"🧲",name:"Magnet Chain"},
+{symbol:"🧪",name:"Alchemist Phial"},
+{symbol:"🪬",name:"Hamsa Ward"},
+{symbol:"🧿",name:"Evil Eye Seal"},
+{symbol:"🕯️",name:"Candlelit Vigil"},
+{symbol:"🗝️",name:"Keybearer Glyph"},
+{symbol:"🧭",name:"Compass Path"},
+{symbol:"⏳",name:"Hourglass Toll"},
+{symbol:"🌀",name:"Vortex Gate"},
+{symbol:"💥",name:"Impact Nova"},
+{symbol:"☄️",name:"Meteor Scar"},
+{symbol:"🌌",name:"Cosmic Expanse"},
+{symbol:"🏔️",name:"Mountain Throne"},
+{symbol:"🌧️",name:"Rainfall Lament"},
+{symbol:"🎭",name:"Mask of Fates"},
+{symbol:"🎲",name:"Dice Mandate"}
 ];
 
 function emojiSignature(value){
 return Array.from(value).reduce((total,char,index)=>total + char.codePointAt(0)*(index+1),0);
 }
 
-function outcomeForCast(cast){
+function outcomeDetailsForCast(cast){
 const signs=Array.isArray(cast) ? cast : [cast];
 const signature=signs.reduce((total,sign,index)=>total + emojiSignature(sign)*(index+1),0);
 return NON_HAND_OUTCOMES[signature % NON_HAND_OUTCOMES.length];
 }
 
+function outcomeForCast(cast){
+return outcomeDetailsForCast(cast).symbol;
+}
+
+function outcomeNameForCast(cast){
+return outcomeDetailsForCast(cast).name;
+}
+
+function outcomeNameMatrix(){
+return Object.fromEntries(NON_HAND_OUTCOMES.map(outcome=>[outcome.symbol,outcome.name]));
+}
+
 function outcomeMatrix(){
-return Object.fromEntries(Object.keys(GESTURES).map(gesture=>[gesture,outcomeForCast(gesture)]));
+return Object.fromEntries(Object.entries(GESTURES).map(([gesture,details])=>[gesture,{
+gestureName:details.name,
+outcome:outcomeForCast(gesture),
+outcomeName:outcomeNameForCast(gesture)
+}]));
 }
 
 
@@ -660,7 +712,8 @@ return {
 ...parsed,
 id:`JUTSU-${idHash.slice(0,5).toUpperCase()}`,
 name:describeTechnique(parsed.spell),
-outcome:outcomeForCast(parsed.combo)
+outcome:outcomeForCast(parsed.combo),
+outcomeName:outcomeNameForCast(parsed.combo)
 };
 
 }
@@ -1396,7 +1449,7 @@ return combo.map(e=>{
 let g=GESTURES[e];
 
 
-return `${e} ${g.name} → ${outcomeForCast(e)}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
+return `${e} ${g.name} → ${outcomeForCast(e)} ${outcomeNameForCast(e)}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
 
 });
 
@@ -1970,7 +2023,11 @@ gestures:GESTURES,
 
 outcomes:outcomeMatrix(),
 
-outcomeLegend:NON_HAND_OUTCOMES
+outcomeNameMatrix:outcomeNameMatrix(),
+
+outcomeLegend:NON_HAND_OUTCOMES.map(outcome=>outcome.symbol),
+
+outcomeCatalog:NON_HAND_OUTCOMES
 
 });
 
@@ -2075,7 +2132,9 @@ technique:decoded,
 
 outcome:parsed.outcome,
 
-outcomeMatrix:combo.map(gesture=>({gesture,outcome:outcomeForCast(gesture)})),
+outcomeName:parsed.outcomeName,
+
+outcomeMatrix:combo.map(gesture=>({gesture,gestureName:GESTURES[gesture].name,outcome:outcomeForCast(gesture),outcomeName:outcomeNameForCast(gesture)})),
 
 breakdown:analyze(combo),
 

@@ -102,3 +102,31 @@ test("AI Butler keeps enough recent battle history for adaptation metrics", () =
   assert.equal(butler.history.at(-1).battleId, "battle-5");
   assert.equal(butler.preferredStyle, "Barrier");
 });
+
+test("gesture catalog gives every outcome symbol a name and names each gesture outcome", async () => {
+  const response = await worker.fetch(new Request("https://example.com/gestures"), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.outcomeLegend.length, data.outcomeCatalog.length);
+  assert.equal(Object.keys(data.outcomeNameMatrix).length, data.outcomeLegend.length);
+  for (const symbol of data.outcomeLegend) {
+    assert.equal(typeof data.outcomeNameMatrix[symbol], "string");
+    assert.ok(data.outcomeNameMatrix[symbol].length > 0);
+  }
+  for (const [gesture, outcome] of Object.entries(data.outcomes)) {
+    assert.equal(typeof outcome.gestureName, "string", `${gesture} should include its gesture name`);
+    assert.equal(typeof outcome.outcomeName, "string", `${gesture} should include its outcome name`);
+    assert.equal(data.outcomeNameMatrix[outcome.outcome], outcome.outcomeName);
+  }
+});
+
+test("analyze returns a named outcome matrix for every symbol in the combo", async () => {
+  const response = await worker.fetch(new Request(`https://example.com/analyze?combo=${seal("👊🏻🖖🏻")}`), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(typeof data.outcomeName, "string");
+  assert.deepEqual(data.outcomeMatrix.map(row => Object.keys(row)), [
+    ["gesture", "gestureName", "outcome", "outcomeName"],
+    ["gesture", "gestureName", "outcome", "outcomeName"]
+  ]);
+});
