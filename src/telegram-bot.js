@@ -276,9 +276,7 @@ function commandList(playerId) {
     `${STATIC_BUTTONS.myjutsu} — saved signature techniques`,
     `${STATIC_BUTTONS.profile} — your stats`,
     `${STATIC_BUTTONS.draw} — draw 7 signs and seal a 1-5 sign technique`,
-    `${STATIC_BUTTONS.api} — browse every public API feature from Telegram`,
-    "",
-    "Text shortcuts: /lookup <combo>, /analyze <combo>, /rules, /gestures, /train, /changelog, /about, /balance [maxLength], /battle <id>, /replay <combo> <opponent> <matchId>."
+    `${STATIC_BUTTONS.api} — browse every public API feature from Telegram`
   ].filter(Boolean).join("\n");
 }
 
@@ -619,15 +617,43 @@ function truncateTelegramText(value, limit = 3900) {
   return text.length > limit ? `${text.slice(0, limit - 40)}\n… truncated for Telegram. Open the API for more.` : text;
 }
 
+const API_BUTTONS = {
+  help: { text: "📚 Help", path: "/help" },
+  changelog: { text: "📝 Changelog", path: "/changelog" },
+  about: { text: "ℹ️ About", path: "/about" },
+  lookupLast: { text: "🥷 Lookup Last", path: "/lookup", requiresCombo: true },
+  analyzeLast: { text: "🔎 Analyze Last", path: "/analyze", requiresCombo: true },
+  gestures: { text: "🧬 Gestures", path: "/gestures" },
+  rules: { text: "📖 Rules", path: "/rules" },
+  balance: { text: "⚖️ Balance", path: "/balance/simulate?maxLength=3" },
+  duelLast: { text: "⚔️ Duel Last", path: "/duel", promptMode: "awaiting_duel_opponent" },
+  simulateLast: { text: "🎲 Simulate Last", path: "/simulate", promptMode: "awaiting_simulate_opponent" },
+  replay: { text: "🔁 Replay", path: "/replay", promptMode: "awaiting_replay_args" },
+  train: { text: "🎓 Train", path: "/train" },
+  queueStatus: { text: "📥 Queue Status", path: "/queue" },
+  arena: { text: "🏟️ Arena", path: "/arena" },
+  leaderboard: { text: "🏆 Leaderboard", path: "/leaderboard" },
+  rank: { text: "🥇 My Rank", path: "/rank", requiresPlayer: true },
+  battle: { text: "📜 Battle Replay", path: "/battle/:id", promptMode: "awaiting_battle_id" },
+  butler: { text: "🤖 Butler", path: "/butler" },
+  player: { text: "👤 Player", path: "/player", requiresPlayer: true },
+  stats: { text: "📊 Stats", path: "/stats", requiresPlayer: true },
+  chronicle: { text: "📖 Chronicle", path: "/ai/chronicle", promptMode: "awaiting_chronicle_battle_id" },
+  telegramStatus: { text: "🤖 Bot Status", path: "/telegram/status" },
+  aiConfig: { text: "🧠 AI Config", path: "/ai/config" }
+};
+
 function apiKeyboard() {
   return screenKeyboard([
-    [{ text: "📚 Help", callback_data: "api:help" }, { text: "📖 Rules", callback_data: "api:rules" }],
-    [{ text: "🧬 Gestures", callback_data: "api:gestures" }, { text: "🎓 Train", callback_data: "api:train" }],
-    [{ text: "📝 Changelog", callback_data: "api:changelog" }, { text: "ℹ️ About", callback_data: "api:about" }],
-    [{ text: "⚖️ Balance", callback_data: "api:balance" }, { text: "📥 Queue Status", callback_data: "api:queue-status" }],
-    [{ text: "🔎 Analyze Last", callback_data: "api:analyze-last" }, { text: "🥷 Lookup Last", callback_data: "api:lookup-last" }],
-    [{ text: "⚔️ Simulate Last", callback_data: "api:simulate-last" }, { text: "📜 Chronicle Last", callback_data: "api:chronicle-last" }],
-    [{ text: "👤 Player", callback_data: "api:player" }, { text: "📊 Stats", callback_data: "api:stats" }]
+    ["help", "changelog", "about"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["lookupLast", "analyzeLast"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["gestures", "rules", "train"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["balance", "queueStatus"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["duelLast", "simulateLast", "replay"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["arena", "leaderboard", "rank"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["battle", "butler", "chronicle"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["player", "stats"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` })),
+    ["telegramStatus", "aiConfig"].map(key => ({ text: API_BUTTONS[key].text, callback_data: `api:${key}` }))
   ]);
 }
 
@@ -668,15 +694,9 @@ async function sendApiEndpoint(request, env, chatId, path, editMessageId = null)
 async function showApiMenu(env, chatId, editMessageId = null) {
   const text = [
     "🧭 API from Telegram",
-    "Use buttons for public reference endpoints, or send:",
-    "/lookup <combo>",
-    "/analyze <combo>",
-    "/duel <opponent combo or player id>",
-    "/queue, /arena, /leaderboard, /rank, /butler",
-    "/profile, /myjutsu",
-    "/rules, /gestures, /train, /changelog, /about, /apihelp",
-    "/balance [1-3], /battle <battleId>, /replay <combo> <opponent> <matchId>",
-    "/simulate <opponent>, /queue_status, /player [id], /chronicle [battleId]"
+    "Every API endpoint has a canonical button below.",
+    "Buttons that need extra input will ask for the missing combo, player id, battle id, or replay values.",
+    "Operational endpoints that require an admin token are shown for completeness and may return Unauthorized from Telegram."
   ].join("\n");
   return sendOrEdit(env, chatId, text, apiKeyboard(), editMessageId);
 }
@@ -862,6 +882,43 @@ async function handleMessage(request, env, message) {
     return runDuel(request, env, chat.id, session, textBody);
   }
 
+  if (session.mode === "awaiting_simulate_opponent" && textBody) {
+    const next = { ...session };
+    delete next.mode;
+    await saveSession(env, chat.id, next);
+    if (!session.lastCombo) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.` }));
+    return sendApiEndpoint(request, env, chat.id, `/simulate?combo=${encodeURIComponent(session.lastCombo)}&opponent=${encodeURIComponent(normalizeSealedCombo(textBody))}`);
+  }
+
+  if (session.mode === "awaiting_replay_args" && textBody) {
+    const next = { ...session };
+    delete next.mode;
+    await saveSession(env, chat.id, next);
+    const [comboArg, opponentArg, matchId] = textBody.split(/\s+/);
+    if (!comboArg || !opponentArg) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Replay needs: combo opponent [matchId]. Tap Replay again and send all values in one message." }));
+    const q = new URLSearchParams({ combo: normalizeSealedCombo(comboArg), opponent: normalizeSealedCombo(opponentArg) });
+    if (matchId) q.set("matchId", matchId);
+    return sendApiEndpoint(request, env, chat.id, `/replay?${q}`);
+  }
+
+  if (session.mode === "awaiting_battle_id" && textBody) {
+    const next = { ...session };
+    delete next.mode;
+    await saveSession(env, chat.id, next);
+    return sendApiEndpoint(request, env, chat.id, `/battle/${encodeURIComponent(textBody)}`);
+  }
+
+  if (session.mode === "awaiting_chronicle_battle_id" && textBody) {
+    const next = { ...session };
+    delete next.mode;
+    await saveSession(env, chat.id, next);
+    const battle = await callWorkerJson(request, `/battle/${encodeURIComponent(textBody)}`);
+    if (!battle.ok) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Battle lookup failed: ${battle.data?.error || battle.status}` }));
+    const chronicle = await callWorkerJson(request, "/ai/chronicle", { method: "POST", body: JSON.stringify(battle.data) });
+    return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: chronicle.ok ? `📜 Chronicle
+${truncateTelegramText(chronicle.data.chronicle || chronicle.data)}` : `Chronicle failed: ${chronicle.data?.error || chronicle.status}` }));
+  }
+
   const normalizedTextCombo = normalizeSealedCombo(textBody);
   if (HAND_SIGN_PATTERN.test(normalizedTextCombo)) {
     return sendLookupPreview(request, env, chat.id, session, normalizedTextCombo);
@@ -871,93 +928,43 @@ async function handleMessage(request, env, message) {
     return showHome(env, chat.id, session);
   }
 
-  if (command === "/api" || command === STATIC_BUTTONS.api) return showApiMenu(env, chat.id);
+  if (command === STATIC_BUTTONS.api) return showApiMenu(env, chat.id);
 
-  if (command === "/apihelp" || command === "/commands") return sendApiEndpoint(request, env, chat.id, "/help");
-
-  if (["/rules", "/gestures", "/train", "/changelog", "/about"].includes(command)) {
-    return sendApiEndpoint(request, env, chat.id, command);
+  if (textBody.startsWith("/") && !["/start", "/help", "/cancel"].includes(command)) {
+    return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Slash commands were replaced with canonical buttons. Tap ${STATIC_BUTTONS.api} or the menu below.` }));
   }
 
-  if (command === "/balance") {
-    const maxLength = args[0] || "3";
-    return sendApiEndpoint(request, env, chat.id, `/balance/simulate?maxLength=${encodeURIComponent(maxLength)}`);
-  }
+  if (command === STATIC_BUTTONS.cast) return showCast(request, env, chat.id);
 
-  if (command === "/queue_status") return sendApiEndpoint(request, env, chat.id, "/queue");
+  if (command === STATIC_BUTTONS.draw) return showDraw(request, env, chat.id, session, null, true);
 
-  if (command === "/player") {
-    const playerId = args.join(" ").trim() || session.playerId;
-    if (!playerId) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Send /player <playerId>." }));
-    return sendApiEndpoint(request, env, chat.id, `/player?id=${encodeURIComponent(playerId)}`);
-  }
-
-  if (command === "/chronicle") {
-    const battleId = args.join(" ").trim();
-    if (!battleId) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Send /chronicle <battleId>, or use the API button after a battle is available." }));
-    const battle = await callWorkerJson(request, `/battle/${encodeURIComponent(battleId)}`);
-    if (!battle.ok) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Battle lookup failed: ${battle.data?.error || battle.status}` }));
-    const chronicle = await callWorkerJson(request, "/ai/chronicle", { method: "POST", body: JSON.stringify(battle.data) });
-    return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: chronicle.ok ? `📜 Chronicle\n${truncateTelegramText(chronicle.data.chronicle || chronicle.data)}` : `Chronicle failed: ${chronicle.data?.error || chronicle.status}` }));
-  }
-
-  if (command === "/battle") {
-    const battleId = args.join(" ").trim();
-    if (!battleId) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Send /battle <battleId>." }));
-    return sendApiEndpoint(request, env, chat.id, `/battle/${encodeURIComponent(battleId)}`);
-  }
-
-  if (command === "/lookup" || command === "/analyze") {
-    const comboArg = args.join(" ").trim() || session.lastCombo;
-    if (!comboArg) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Send ${command} <combo>, or cast and seal a technique first.` }));
-    return sendApiEndpoint(request, env, chat.id, `${command}?combo=${encodeURIComponent(normalizeSealedCombo(comboArg))}`);
-  }
-
-  if (command === "/simulate") {
-    const opponentArg = args.join(" ").trim();
-    if (!session.lastCombo || !opponentArg) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Cast first, then send /simulate <opponent combo>." }));
-    return sendApiEndpoint(request, env, chat.id, `/simulate?combo=${encodeURIComponent(session.lastCombo)}&opponent=${encodeURIComponent(normalizeSealedCombo(opponentArg))}`);
-  }
-
-  if (command === "/replay") {
-    const [comboArg, opponentArg, matchId] = args;
-    if (!comboArg || !opponentArg) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Send /replay <combo> <opponent> [matchId]." }));
-    const q = new URLSearchParams({ combo: normalizeSealedCombo(comboArg), opponent: normalizeSealedCombo(opponentArg) });
-    if (matchId) q.set("matchId", matchId);
-    return sendApiEndpoint(request, env, chat.id, `/replay?${q}`);
-  }
-
-  if (command === "/cast" || command === STATIC_BUTTONS.cast) return showCast(request, env, chat.id);
-
-  if (command === "/draw" || command === STATIC_BUTTONS.draw) return showDraw(request, env, chat.id, session, null, true);
-
-  if (command === "/queue" || command === STATIC_BUTTONS.queue) {
+  if (command === STATIC_BUTTONS.queue) {
     const sealed = session.last_sealed_jutsu || session.lastCombo;
     if (!sealed) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}, or paste a combo and tap Save/Seal.` }));
     return queueCombo(request, env, chat.id, session, sealed);
   }
 
-  if (command === "/arena" || command === STATIC_BUTTONS.arena) {
+  if (command === STATIC_BUTTONS.arena) {
     return showArena(request, env, chat.id);
   }
 
-  if (command === "/leaderboard" || command === "/rank" || command === STATIC_BUTTONS.rankings) {
+  if (command === STATIC_BUTTONS.rankings) {
     return showRankings(request, env, chat.id, session);
   }
 
-  if (command === "/butler" || command === STATIC_BUTTONS.butler) {
+  if (command === STATIC_BUTTONS.butler) {
     return showButler(request, env, chat.id);
   }
 
-  if (command === "/profile" || command === STATIC_BUTTONS.profile) {
+  if (command === STATIC_BUTTONS.profile) {
     return showProfile(request, env, chat.id, session);
   }
 
-  if (command === "/myjutsu" || command === STATIC_BUTTONS.myjutsu) {
+  if (command === STATIC_BUTTONS.myjutsu) {
     return showMyJutsu(request, env, chat.id, session);
   }
 
-  if (command === "/duel" || command === STATIC_BUTTONS.duel) {
+  if (command === STATIC_BUTTONS.duel) {
     if (!session.lastCombo) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Cast and seal your technique first with ${STATIC_BUTTONS.cast}.` }));
     const opponentArg = args.join(" ");
     if (!opponentArg) return sendDuelPrompt(env, chat.id, session);
@@ -1005,35 +1012,37 @@ async function handleFrontEndCallback(request, env, callback) {
 
   if (scope === "api") {
     await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id });
-    if (action === "lookup-last" || action === "analyze-last") {
-      const combo = session.last_sealed_jutsu || session.lastCombo;
+    const button = API_BUTTONS[action];
+    if (!button) return showApiMenu(env, chatId, callback.message.message_id);
+
+    const combo = session.last_sealed_jutsu || session.lastCombo;
+    if (button.requiresCombo) {
       if (!combo) return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.`, reply_markup: apiKeyboard() });
-      const endpoint = action === "lookup-last" ? "/lookup" : "/analyze";
-      return sendApiEndpoint(request, env, chatId, `${endpoint}?combo=${encodeURIComponent(combo)}`, callback.message.message_id);
+      return sendApiEndpoint(request, env, chatId, `${button.path}?combo=${encodeURIComponent(combo)}`, callback.message.message_id);
     }
-    if (action === "simulate-last") {
-      const combo = session.last_sealed_jutsu || session.lastCombo;
-      if (!combo) return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.`, reply_markup: apiKeyboard() });
-      return sendOrEdit(env, chatId, `Send /simulate <opponent combo> to call /simulate with your last technique:\n${combo}`, apiKeyboard(), callback.message.message_id);
+
+    if (button.requiresPlayer) {
+      if (!session.playerId) return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: "Create or load a Telegram player first.", reply_markup: apiKeyboard() });
+      const param = button.path === "/rank" ? "id" : "id";
+      return sendApiEndpoint(request, env, chatId, `${button.path}?${param}=${encodeURIComponent(session.playerId)}`, callback.message.message_id);
     }
-    if (action === "chronicle-last") {
-      return sendOrEdit(env, chatId, "Send /chronicle <battleId> to call /battle/:id and /ai/chronicle, or finish a duel/queue match to receive a chronicle automatically.", apiKeyboard(), callback.message.message_id);
+
+    if (button.promptMode) {
+      if ((action === "duelLast" || action === "simulateLast") && !combo) {
+        return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.`, reply_markup: apiKeyboard() });
+      }
+      await saveSession(env, chatId, { ...session, mode: button.promptMode });
+      const prompts = {
+        duelLast: `Duel endpoint armed with ${combo}. Send an opponent combo or rival player id.`,
+        simulateLast: `Simulate endpoint armed with ${combo}. Send the opponent combo.`,
+        replay: "Replay endpoint selected. Send: combo opponent [matchId].",
+        battle: "Battle replay endpoint selected. Send the battle id.",
+        chronicle: "Chronicle endpoint selected. Send a battle id to load /battle/:id and post it to /ai/chronicle."
+      };
+      return sendOrEdit(env, chatId, prompts[action] || "Send the requested value.", apiKeyboard(), callback.message.message_id);
     }
-    if (action === "player" || action === "stats") {
-      const endpoint = action === "player" ? "/player" : "/stats";
-      return sendApiEndpoint(request, env, chatId, `${endpoint}?id=${encodeURIComponent(session.playerId)}`, callback.message.message_id);
-    }
-    const apiPaths = {
-      help: "/help",
-      rules: "/rules",
-      gestures: "/gestures",
-      train: "/train",
-      changelog: "/changelog",
-      about: "/about",
-      balance: "/balance/simulate?maxLength=3",
-      "queue-status": "/queue"
-    };
-    if (apiPaths[action]) return sendApiEndpoint(request, env, chatId, apiPaths[action], callback.message.message_id);
+
+    return sendApiEndpoint(request, env, chatId, button.path, callback.message.message_id);
   }
 
   if ((scope === "duel" || scope === "queue") && action === "use") {
