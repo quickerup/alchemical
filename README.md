@@ -9,7 +9,7 @@ Players create a technique by combining 1-5 supported hand-sign emoji and sealin
 - Deterministic emoji jutsu lookup and analysis.
 - Rock-paper-scissors-style force triangle: Kinetic, Barrier, and Mystic.
 - Replayable duel and simulation endpoints.
-- Persistent arena queue, battle history, leaderboard, and AI Butler state through KV.
+- Persistent arena queue, battle history, ranked ELO ladder, leaderboard, and AI Butler state through KV.
 - D1-backed player profiles and saved signature jutsu.
 - Telegram bot webhook and runtime configuration endpoint.
 - Cloudflare AI chronicle generation for stylized battle narration.
@@ -126,6 +126,18 @@ View arena state:
 curl "$BASE_URL/arena"
 ```
 
+View ranked ELO leaders and tier goals:
+
+```sh
+curl "$BASE_URL/leaderboard"
+```
+
+View an individual ranked profile:
+
+```sh
+curl "$BASE_URL/rank?id=shinobi"
+```
+
 ## Admin Configuration
 
 Protected endpoints accept the configured admin token as either `X-Admin-Token` or a bearer token.
@@ -163,7 +175,7 @@ curl "$BASE_URL/ai/config" -H "X-Admin-Token: $ADMIN_TOKEN"
 ## Project Structure
 
 ```text
-src/worker.js          Main Cloudflare Worker and game API logic
+src/worker.js          Main Cloudflare Worker and game API logic, including ELO ranking state
 src/telegram-bot.js    Telegram webhook, callbacks, and bot configuration
 test/worker.test.js    Node test coverage for combat and arena behavior
 migrations/            D1 schema migrations
