@@ -257,7 +257,8 @@ const STATIC_BUTTONS = {
   myjutsu: "📜 My Jutsu",
   profile: "👤 Profile",
   draw: "🎴 Draw",
-  help: "❓ Help"
+  help: "❓ Help",
+  api: "🧭 API"
 };
 
 function commandList(playerId) {
@@ -274,7 +275,10 @@ function commandList(playerId) {
     `${STATIC_BUTTONS.butler} — inspect the AI Butler`,
     `${STATIC_BUTTONS.myjutsu} — saved signature techniques`,
     `${STATIC_BUTTONS.profile} — your stats`,
-    `${STATIC_BUTTONS.draw} — draw 7 signs and seal a 1-5 sign technique`
+    `${STATIC_BUTTONS.draw} — draw 7 signs and seal a 1-5 sign technique`,
+    `${STATIC_BUTTONS.api} — browse every public API feature from Telegram`,
+    "",
+    "Text shortcuts: /lookup <combo>, /analyze <combo>, /rules, /gestures, /train, /changelog, /about, /balance [maxLength], /battle <id>, /replay <combo> <opponent> <matchId>."
   ].filter(Boolean).join("\n");
 }
 
@@ -286,7 +290,7 @@ function mainMenuKeyboard() {
       [{ text: STATIC_BUTTONS.rankings, callback_data: "nav:rankings" }],
       [{ text: STATIC_BUTTONS.myjutsu, callback_data: "nav:myjutsu" }, { text: STATIC_BUTTONS.profile, callback_data: "nav:profile" }],
       [{ text: STATIC_BUTTONS.draw, callback_data: "nav:draw" }, { text: STATIC_BUTTONS.butler, callback_data: "nav:butler" }],
-      [{ text: STATIC_BUTTONS.help, callback_data: "nav:help" }]
+      [{ text: STATIC_BUTTONS.api, callback_data: "nav:api" }, { text: STATIC_BUTTONS.help, callback_data: "nav:help" }]
     ]
   };
 }
@@ -319,7 +323,8 @@ async function showHome(env, chatId, session, editMessageId = null) {
     session?.lastCombo ? `Last sealed: ${session.lastCombo}` : "No sealed technique yet.",
     "",
     "Tap a button below. Cast freely, paste a combo, or use Draw Mode for a 7-card hand.",
-    "Draw Mode deals 7 signs, lets you pick 1-5, verifies the lookup, saves valid jutsu, and keeps Queue/Duel synced."
+    "Draw Mode deals 7 signs, lets you pick 1-5, verifies the lookup, saves valid jutsu, and keeps Queue/Duel synced.",
+    `Use ${STATIC_BUTTONS.api} for rules, gestures, changelog, balance simulation, battle replay, and raw API-style lookups.`
   ].filter(Boolean).join("\n");
   return sendOrEdit(env, chatId, text, mainMenuKeyboard(), editMessageId);
 }
@@ -608,6 +613,59 @@ function formatTechniquePreview(combo, technique) {
   ].join("\n");
 }
 
+
+function truncateTelegramText(value, limit = 3900) {
+  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  return text.length > limit ? `${text.slice(0, limit - 40)}\n… truncated for Telegram. Open the API for more.` : text;
+}
+
+function apiKeyboard() {
+  return screenKeyboard([
+    [{ text: "📖 Rules", callback_data: "api:rules" }, { text: "🧬 Gestures", callback_data: "api:gestures" }],
+    [{ text: "🎓 Train", callback_data: "api:train" }, { text: "📝 Changelog", callback_data: "api:changelog" }],
+    [{ text: "ℹ️ About", callback_data: "api:about" }, { text: "⚖️ Balance", callback_data: "api:balance" }],
+    [{ text: "🔎 Analyze Last", callback_data: "api:analyze-last" }, { text: "🥷 Lookup Last", callback_data: "api:lookup-last" }]
+  ]);
+}
+
+function formatApiEndpoint(path, data) {
+  if (path === "/rules") return `📖 Rules\n${truncateTelegramText(data.summary || data)}`;
+  if (path === "/train") return `🎓 Training\n${truncateTelegramText(data)}`;
+  if (path === "/about") return `ℹ️ About\n${data.name} v${data.version}\n${data.description}\nCommands: ${data.availableCommandsUrl}`;
+  if (path === "/changelog") return `📝 Changelog\n${truncateTelegramText(data)}`;
+  if (path === "/gestures") {
+    const gestures = Object.entries(data.gestures || {}).map(([emoji, g]) => `${emoji} ${g.name}: ATK ${g.atk} DEF ${g.def} SPC ${g.spc} ${g.type}`).join("\n");
+    return `🧬 Gestures (${data.count})\n${truncateTelegramText(gestures)}`;
+  }
+  if (path.startsWith("/balance/simulate")) {
+    const top = (data.topCombos || []).slice(0, 10).map((c, i) => `${i + 1}. ${c.combo} ${c.class} P${c.power} WR ${percent(c.winRate)}`).join("\n");
+    return `⚖️ Balance simulation\nCombos: ${data.comboCount}; max length: ${data.maxLength}\n\nTop combos:\n${top || "No results."}`;
+  }
+  return truncateTelegramText(data);
+}
+
+async function sendApiEndpoint(request, env, chatId, path, editMessageId = null) {
+  await sendTypingIndicator(env, chatId);
+  const result = await callWorkerJson(request, path);
+  const text = result.ok ? formatApiEndpoint(path, result.data) : `API request failed for ${path}: ${result.data?.error || result.status}`;
+  return sendOrEdit(env, chatId, text, apiKeyboard(), editMessageId);
+}
+
+async function showApiMenu(env, chatId, editMessageId = null) {
+  const text = [
+    "🧭 API from Telegram",
+    "Use buttons for public reference endpoints, or send:",
+    "/lookup <combo>",
+    "/analyze <combo>",
+    "/duel <opponent combo or player id>",
+    "/queue, /arena, /leaderboard, /rank, /butler",
+    "/profile, /myjutsu",
+    "/rules, /gestures, /train, /changelog, /about",
+    "/balance [1-3], /battle <battleId>, /replay <combo> <opponent> <matchId>"
+  ].join("\n");
+  return sendOrEdit(env, chatId, text, apiKeyboard(), editMessageId);
+}
+
 async function sendLookupPreview(request, env, chatId, session, rawCombo) {
   const sealed = normalizeSealedCombo(rawCombo);
   const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
@@ -798,6 +856,37 @@ async function handleMessage(request, env, message) {
     return showHome(env, chat.id, session);
   }
 
+  if (command === "/api" || command === STATIC_BUTTONS.api) return showApiMenu(env, chat.id);
+
+  if (["/rules", "/gestures", "/train", "/changelog", "/about"].includes(command)) {
+    return sendApiEndpoint(request, env, chat.id, command);
+  }
+
+  if (command === "/balance") {
+    const maxLength = args[0] || "3";
+    return sendApiEndpoint(request, env, chat.id, `/balance/simulate?maxLength=${encodeURIComponent(maxLength)}`);
+  }
+
+  if (command === "/battle") {
+    const battleId = args.join(" ").trim();
+    if (!battleId) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Send /battle <battleId>." }));
+    return sendApiEndpoint(request, env, chat.id, `/battle/${encodeURIComponent(battleId)}`);
+  }
+
+  if (command === "/lookup" || command === "/analyze") {
+    const comboArg = args.join(" ").trim() || session.lastCombo;
+    if (!comboArg) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Send ${command} <combo>, or cast and seal a technique first.` }));
+    return sendApiEndpoint(request, env, chat.id, `${command}?combo=${encodeURIComponent(normalizeSealedCombo(comboArg))}`);
+  }
+
+  if (command === "/replay") {
+    const [comboArg, opponentArg, matchId] = args;
+    if (!comboArg || !opponentArg) return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Send /replay <combo> <opponent> [matchId]." }));
+    const q = new URLSearchParams({ combo: normalizeSealedCombo(comboArg), opponent: normalizeSealedCombo(opponentArg) });
+    if (matchId) q.set("matchId", matchId);
+    return sendApiEndpoint(request, env, chat.id, `/replay?${q}`);
+  }
+
   if (command === "/cast" || command === STATIC_BUTTONS.cast) return showCast(request, env, chat.id);
 
   if (command === "/draw" || command === STATIC_BUTTONS.draw) return showDraw(request, env, chat.id, session, null, true);
@@ -869,8 +958,28 @@ async function handleFrontEndCallback(request, env, callback) {
     if (action === "profile") return showProfile(request, env, chatId, session, callback.message.message_id);
     if (action === "myjutsu") return showMyJutsu(request, env, chatId, session, callback.message.message_id);
     if (action === "help") return sendOrEdit(env, chatId, commandList(session.playerId), mainMenuKeyboard(), callback.message.message_id);
+    if (action === "api") return showApiMenu(env, chatId, callback.message.message_id);
     const fakeMessage = { chat: callback.message.chat, from: callback.from, text: STATIC_BUTTONS[action] || `/${action}` };
     return handleMessage(request, env, fakeMessage);
+  }
+
+  if (scope === "api") {
+    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id });
+    if (action === "lookup-last" || action === "analyze-last") {
+      const combo = session.last_sealed_jutsu || session.lastCombo;
+      if (!combo) return telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text: `Cast and seal a technique first with ${STATIC_BUTTONS.cast}.`, reply_markup: apiKeyboard() });
+      const endpoint = action === "lookup-last" ? "/lookup" : "/analyze";
+      return sendApiEndpoint(request, env, chatId, `${endpoint}?combo=${encodeURIComponent(combo)}`, callback.message.message_id);
+    }
+    const apiPaths = {
+      rules: "/rules",
+      gestures: "/gestures",
+      train: "/train",
+      changelog: "/changelog",
+      about: "/about",
+      balance: "/balance/simulate?maxLength=3"
+    };
+    if (apiPaths[action]) return sendApiEndpoint(request, env, chatId, apiPaths[action], callback.message.message_id);
   }
 
   if ((scope === "duel" || scope === "queue") && action === "use") {
@@ -1025,7 +1134,7 @@ export async function handleTelegramWebhook(request, env) {
     if (update.callback_query?.data?.startsWith("cast:")) await handleCastCallback(request, env, update.callback_query);
     else if (update.callback_query?.data?.startsWith("draw:")) await handleDrawCallback(request, env, update.callback_query);
     else if (update.callback_query?.data?.startsWith("lookup:seal:")) await handleLookupCallback(request, env, update.callback_query);
-    else if (update.callback_query?.data?.startsWith("nav:") || update.callback_query?.data?.startsWith("duel:use:") || update.callback_query?.data?.startsWith("queue:use:")) await handleFrontEndCallback(request, env, update.callback_query);
+    else if (update.callback_query?.data?.startsWith("nav:") || update.callback_query?.data?.startsWith("api:") || update.callback_query?.data?.startsWith("duel:use:") || update.callback_query?.data?.startsWith("queue:use:")) await handleFrontEndCallback(request, env, update.callback_query);
     else if (update.message) await handleMessage(request, env, update.message);
     return json({ ok: true });
   } catch (error) {
