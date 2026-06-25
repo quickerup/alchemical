@@ -971,6 +971,18 @@ ${truncateTelegramText(chronicle.data.chronicle || chronicle.data)}` : `Chronicl
 
   if (command === STATIC_BUTTONS.api) return showApiMenu(env, chat.id);
 
+  // New: support /api <endpoint> text commands
+  if (command.startsWith("/api")) {
+    // Extract the path after '/api'
+    let apiPath = command.substring(4).trim();
+    if (!apiPath) return showApiMenu(env, chat.id);
+    if (!apiPath.startsWith("/")) apiPath = `/${apiPath}`;
+    // Preserve any additional args as query string if present
+    const extra = args.join(" ");
+    if (extra) apiPath += `?${new URLSearchParams({ q: extra })}`;
+    return sendApiEndpoint(request, env, chat.id, apiPath);
+  }
+
   if (textBody.startsWith("/") && !["/start", "/help", "/cancel"].includes(command)) {
     return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: `Slash commands were replaced with canonical buttons. Tap ${STATIC_BUTTONS.api} or the menu below.` }));
   }
