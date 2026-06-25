@@ -455,9 +455,16 @@ async function handleCastCallback(request, env, callback) {
     const stats = technique.stats || {};
     const lookupSucceeded = lookup.ok && technique.name && technique.rank && technique.stats;
 
+    let saveResult = null;
     if (lookupSucceeded) {
       session.lastCombo = sealed;
       session.last_sealed_jutsu = sealed;
+      if (session.playerId) {
+        saveResult = await callWorkerJson(request, "/jutsu/save", {
+          method: "POST",
+          body: JSON.stringify({ playerId: session.playerId, name: technique.name, combo: sealed })
+        });
+      }
     } else {
       // Clear stale combo so Queue and Duel don't inherit a broken technique
       session.lastCombo = null;
@@ -467,7 +474,6 @@ async function handleCastCallback(request, env, callback) {
     await saveSession(env, chatId, session);
     const resultText = lookupSucceeded
       ? `Sealed: ${sealed} → ${technique.outcome || "✨"}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}\n${saveResult?.ok ? "Saved to My Jutsu." : "Sealed for this session; My Jutsu save is temporarily unavailable."}`
-      ? `Sealed: ${sealed} → ${technique.outcome || "✨"}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}`
       : `Sealed: ${sealed}\nTechnique lookup is temporarily unavailable. Try ${STATIC_BUTTONS.duel} or ${STATIC_BUTTONS.queue} in a moment.`;
 
     await telegram(env, "editMessageText", {
