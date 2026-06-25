@@ -1,5 +1,7 @@
 const TELEGRAM_API = "https://api.telegram.org";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
+const GESTURE_CACHE_TTL_MS = 60 * 60 * 1000;
+const MAX_PENDING_LOOKUPS = 8;
 const FINISHER = "🙏";
 const GESTURE_CACHE = {
   values: null,
@@ -203,6 +205,14 @@ async function parseResponseBody(response) {
   }
 }
 
+async function sendTypingIndicator(env, chatId) {
+  try {
+    await telegram(env, "sendChatAction", { chat_id: chatId, action: "typing" });
+  } catch (error) {
+    console.warn(`Telegram sendChatAction failed: ${error.message}`);
+  }
+}
+
 async function callWorkerJson(request, path, init = {}) {
   const response = await fetch(workerUrl(request, path), {
     ...init,
@@ -344,7 +354,7 @@ async function ensurePlayer(request, env, chat, from = null) {
 }
 
 async function loadGestures(request) {
-  if (GESTURE_CACHE.values) return GESTURE_CACHE.values;
+  if (GESTURE_CACHE.values && Date.now() - GESTURE_CACHE.loadedAt < GESTURE_CACHE_TTL_MS) return GESTURE_CACHE.values;
 
   try {
     const response = await fetch(workerUrl(request, "/gestures"));
@@ -386,7 +396,7 @@ async function showCast(request, env, chatId, editMessageId) {
   const combo = session.castCombo || [];
   const payload = {
     chat_id: chatId,
-    text: `Build your technique (1-5 signs), then seal with ${FINISHER}.\nCurrent: ${combo.join("") || "—"}`,
+    text: `Build your technique (1-5 signs), then seal with ${FINISHER}.\nCurrent: ${combo.join("") || "—"}\nSigns: ${combo.length}/5`,
     reply_markup: castKeyboard(gestures, combo)
   };
 
@@ -548,9 +558,22 @@ async function handleDrawCallback(request, env, callback) {
   await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id });
 }
 
+function percent(n) {
+  return `${Math.round((Number(n) || 0) * 100)}%`;
+}
+
+function playerWinRate(record) {
+  const battles = Number(record?.battles || record?.wins + record?.losses + record?.draws || 0);
+  return battles ? Number(((record.wins || 0) / battles).toFixed(2)) : 0;
+}
+
+function medalForRank(index) {
+  return ["🥇", "🥈", "🥉"][index] || "🏅";
+}
+
 function formatArena(arena) {
-  const leaders = (arena.leaderboard || []).slice(0, 5).map((p, i) => `${i + 1}. ${p.playerId}: ${p.wins}W/${p.losses}L/${p.draws}D`).join("\n") || "No battles yet.";
-  return `Arena queue: ${(arena.queue || []).length}\n\nLeaderboard:\n${leaders}`;
+  const leaders = (arena.leaderboard || []).slice(0, 5).map((p, i) => `${medalForRank(i)} ${p.playerId}: ${p.wins}W/${p.losses}L/${p.draws}D • ${percent(playerWinRate(p))} WR`).join("\n") || "No battles yet.";
+  return `Arena queue: ${(arena.queue || []).length}\nActive battles: ${(arena.activeBattles || []).length}\nRecent battles: ${(arena.history || []).length}\n\nLeaderboard:\n${leaders}`;
 }
 
 function formatTechniquePreview(combo, technique) {
@@ -574,8 +597,10 @@ async function sendLookupPreview(request, env, chatId, session, rawCombo) {
     return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Technique lookup failed: ${lookup.data?.error || "temporarily unavailable"}` }));
   }
 
-  const token = await shortId(`${chatId}:${sealed}`);
-  const pendingLookups = { ...(session.pendingLookups || {}), [token]: sealed };
+  await sendTypingIndicator(env, chatId);
+  const token = await shortId(`${chatId}:${sealed}:${Date.now()}`);
+  const pendingLookupEntries = Object.entries(session.pendingLookups || {}).slice(-(MAX_PENDING_LOOKUPS - 1));
+  const pendingLookups = { ...Object.fromEntries(pendingLookupEntries), [token]: sealed };
   await saveSession(env, chatId, { ...session, pendingLookups });
 
   return telegram(env, "sendMessage", {
@@ -618,6 +643,7 @@ async function handleLookupCallback(request, env, callback) {
 
 
 async function queueCombo(request, env, chatId, session, sealed) {
+  await sendTypingIndicator(env, chatId);
   const validation = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
   if (!validation.ok) {
     return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Queue failed: your sealed technique is invalid (${validation.data.error || "unknown error"}). Seal a fresh combo first.` }));
@@ -629,6 +655,7 @@ async function queueCombo(request, env, chatId, session, sealed) {
 }
 
 async function sendChronicleFollowup(request, env, chatId, matchData) {
+  await sendTypingIndicator(env, chatId);
   const chronicle = await callWorkerJson(request, "/ai/chronicle", { method: "POST", body: JSON.stringify(matchData) });
   if (!chronicle.ok || !chronicle.data?.chronicle) return null;
   const text = String(chronicle.data.chronicle).slice(0, 3900);
@@ -649,6 +676,7 @@ Paste an opponent combo ending in ${FINISHER}, or send a rival player ID.`,
 }
 
 async function runDuel(request, env, chatId, session, opponentArg) {
+  await sendTypingIndicator(env, chatId);
   if (!session.lastCombo) return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Cast and seal your technique first with ${STATIC_BUTTONS.cast}.` }));
   let opponent = normalizeSealedCombo(opponentArg);
   let opponentPlayer = "";
@@ -675,6 +703,7 @@ async function runDuel(request, env, chatId, session, opponentArg) {
 }
 
 async function showArena(request, env, chatId, editMessageId = null) {
+  await sendTypingIndicator(env, chatId);
   const arena = await callWorkerJson(request, "/arena");
   return sendOrEdit(env, chatId, formatArena(arena.data), screenKeyboard([[{ text: "🔄 Refresh Arena", callback_data: "nav:arena" }]]), editMessageId);
 }
@@ -688,15 +717,27 @@ async function showButler(request, env, chatId, editMessageId = null) {
 }
 
 async function showProfile(request, env, chatId, session, editMessageId = null) {
+  await sendTypingIndicator(env, chatId);
   const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
   const p = stats.data.player || {};
-  const text = `Profile ${p.username || session.username}\nID: ${session.playerId}\n${p.wins || 0}W/${p.losses || 0}L/${p.draws || 0}D\nXP: ${p.xp || 0}\nPoints: ${p.points || 0}`;
+  const wins = Number(p.wins || 0);
+  const losses = Number(p.losses || 0);
+  const draws = Number(p.draws || 0);
+  const battles = wins + losses + draws;
+  const jutsuCount = (stats.data.signature_jutsu || []).length;
+  const level = Math.max(1, Math.floor(Number(p.xp || 0) / 100) + 1);
+  const text = `Profile ${p.username || session.username}\nID: ${session.playerId}\nLevel: ${level}\nRecord: ${wins}W/${losses}L/${draws}D • ${percent(battles ? wins / battles : 0)} WR\nJutsu saved: ${jutsuCount}\nXP: ${p.xp || 0}\nPoints: ${p.points || 0}`;
   return sendOrEdit(env, chatId, text, screenKeyboard([[{ text: STATIC_BUTTONS.myjutsu, callback_data: "nav:myjutsu" }]]), editMessageId);
 }
 
 async function showMyJutsu(request, env, chatId, session, editMessageId = null) {
+  await sendTypingIndicator(env, chatId);
   const stats = await callWorkerJson(request, `/stats?id=${encodeURIComponent(session.playerId)}`);
-  const list = (stats.data.signature_jutsu || []).slice(0, 10).map(j => `• ${j.name}: ${j.combo}`).join("\n") || "No saved signatures yet.";
+  const list = (stats.data.signature_jutsu || []).slice(0, 10).map(j => {
+    const uses = Number(j.usage_count || 0);
+    const wins = Number(j.wins || 0);
+    return `• ${j.name}: ${j.combo} • ${wins}/${uses} wins (${percent(uses ? wins / uses : 0)} WR)`;
+  }).join("\n") || "No saved signatures yet.";
   return sendOrEdit(env, chatId, list, screenKeyboard([[{ text: STATIC_BUTTONS.cast, callback_data: "nav:cast" }]]), editMessageId);
 }
 
@@ -706,6 +747,13 @@ async function handleMessage(request, env, message) {
   const [typedCommand, ...args] = textBody.split(/\s+/);
   const command = Object.values(STATIC_BUTTONS).includes(textBody) ? textBody : typedCommand;
   const session = await ensurePlayer(request, env, chat, message.from);
+
+  if (command === "/cancel") {
+    const next = { ...session, castCombo: [], drawCombo: [], drawHand: [], pendingLookups: {} };
+    delete next.mode;
+    await saveSession(env, chat.id, next);
+    return telegram(env, "sendMessage", withMainMenu({ chat_id: chat.id, text: "Cancelled current action and cleared pending previews." }));
+  }
 
   if (session.mode === "awaiting_duel_opponent" && textBody) {
     return runDuel(request, env, chat.id, session, textBody);
