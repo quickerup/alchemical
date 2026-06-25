@@ -170,3 +170,23 @@ test("ranked ladder applies ELO and rank tiers", () => {
   assert.equal(rankForRating(1800), "Mythic");
   assert.deepEqual(rankedLeaderboard(arena).map(row => row.playerId), ["alice", "bob"]);
 });
+
+test("rank and leaderboard endpoints expose ranked ladder state", async () => {
+  const response = await worker.fetch(new Request(`https://example.com/simulate?combo=${seal("👊🖖")}&opponent=${seal("✋🤟")}&playerA=alice&playerB=bob`), {});
+  assert.equal(response.status, 200);
+  const duel = await response.json();
+  assert.equal(typeof duel.ranked.alice.rating, "number");
+  assert.equal(typeof duel.ranked.bob.rating, "number");
+
+  const boardResponse = await worker.fetch(new Request("https://example.com/leaderboard"), {});
+  assert.equal(boardResponse.status, 200);
+  const board = await boardResponse.json();
+  assert.deepEqual(board.ranks, ["Bronze", "Silver", "Gold", "Platinum", "Astral", "Mythic"]);
+  assert.ok(board.leaderboard.some(row => row.playerId === "alice"));
+
+  const rankResponse = await worker.fetch(new Request("https://example.com/rank?id=alice"), {});
+  assert.equal(rankResponse.status, 200);
+  const rank = await rankResponse.json();
+  assert.equal(rank.rank.playerId, "alice");
+  assert.equal(typeof rank.rank.rating, "number");
+});
