@@ -1,6 +1,6 @@
 const TELEGRAM_API = "https://api.telegram.org";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
-const FINISHER = "🙏🏻";
+const FINISHER = "🙏";
 const GESTURE_CACHE = {
   values: null,
   loadedAt: 0
@@ -8,14 +8,14 @@ const GESTURE_CACHE = {
 const TELEGRAM_CONFIG_KEY = "telegram:config";
 const DEFAULT_TRANSMUTATION_DELETE_DELAY_MS = 2500;
 const DEFAULT_CAST_GESTURES = [
-  "💪🏻", "👏🏻", "👍🏻", "👎🏻", "🫶🏻",
-  "🙌🏻", "👐🏻", "🤲🏻", "🤜🏻", "🤛🏻",
-  "✊🏻", "👊🏻", "🫸🏻", "🫷🏻", "🤚🏻",
-  "🖐🏻", "✋🏻", "🖖🏻", "🤟🏻", "🤞🏻",
-  "✌🏻", "🤌🏻", "🫳🏻", "🫴🏻", "🫲🏻",
-  "🫱🏻", "👋🏻", "🫰🏻", "🤙🏻", "🤏🏻",
-  "👌🏻", "🫵🏻", "👉🏻", "👈🏻", "☝🏻",
-  "👆🏻", "👇🏻", "🖕🏻", "✍🏻", "🤳🏻"
+  "💪", "👏", "👍", "👎", "🫶",
+  "🙌", "👐", "🤲", "🤜", "🤛",
+  "✊", "👊", "🫸", "🫷", "🤚",
+  "🖐", "✋", "🖖", "🤟", "🤞",
+  "✌", "🤌", "🫳", "🫴", "🫲",
+  "🫱", "👋", "🫰", "🤙", "🤏",
+  "👌", "🫵", "👉", "👈", "☝",
+  "👆", "👇", "🖕", "✍", "🤳"
 ];
 const HAND_SIGN_PATTERN = new RegExp(`^(?:${DEFAULT_CAST_GESTURES.map(escapeRegExp).join("|")}){1,5}(?:${escapeRegExp(FINISHER)})?$`, "u");
 

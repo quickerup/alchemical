@@ -13,7 +13,7 @@ import {
   default as worker
 } from "../src/worker.js";
 
-const seal = combo => encodeURIComponent(`${combo}🙏🏻`);
+const seal = combo => encodeURIComponent(`${combo}🙏`);
 const parse = combo => {
   const result = parseTechnique(seal(combo));
   assert.equal(result.error, undefined);
@@ -38,9 +38,9 @@ test("arena persistence mode uses dedicated ARENA_KV, shared KV_BINDING, then vo
 });
 
 test("force advantage stays symmetric and tied classes have no bonus", () => {
-  const kinetic = parse("🤜🏻🤛🏻✊🏻");
-  const mystic = parse("🖖🏻🤟🏻🤞🏻");
-  const barrier = parse("🤚🏻🖐🏻✋🏻");
+  const kinetic = parse("🤜🤛✊");
+  const mystic = parse("🖖🤟🤞");
+  const barrier = parse("🤚🖐✋");
   assert.equal(forceAdvantage(kinetic, kinetic), 0);
   assert.equal(forceAdvantage(kinetic, mystic), FORCE_ADVANTAGE_BONUS + Math.round(mystic.power * FORCE_ADVANTAGE_SCALE));
   assert.equal(forceAdvantage(mystic, kinetic), -(FORCE_ADVANTAGE_BONUS + Math.round(mystic.power * FORCE_ADVANTAGE_SCALE)));
@@ -49,7 +49,7 @@ test("force advantage stays symmetric and tied classes have no bonus", () => {
 });
 
 test("representative class triangle has no single class that dominates both other archetypes", () => {
-  const archetypes = { Kinetic: parse("🤜🏻🤛🏻✊🏻"), Mystic: parse("🖖🏻🤟🏻🤞🏻"), Barrier: parse("🤚🏻🖐🏻✋🏻") };
+  const archetypes = { Kinetic: parse("🤜🤛✊"), Mystic: parse("🖖🤟🤞"), Barrier: parse("🤚🖐✋") };
   const wins = Object.fromEntries(Object.keys(archetypes).map(name => [name, 0]));
   for (const [leftName, left] of Object.entries(archetypes)) {
     for (const [rightName, right] of Object.entries(archetypes)) {
@@ -64,8 +64,8 @@ test("representative class triangle has no single class that dominates both othe
 });
 
 test("repetition penalty makes face-rolled combos meaningfully weaker than varied combos", () => {
-  const repeated = buildSpell(["🤜🏻", "🤜🏻", "🤜🏻", "🤜🏻", "🤜🏻"]);
-  const varied = buildSpell(["🤜🏻", "🤛🏻", "✊🏻", "👊🏻", "🫵🏻"]);
+  const repeated = buildSpell(["🤜", "🤜", "🤜", "🤜", "🤜"]);
+  const varied = buildSpell(["🤜", "🤛", "✊", "👊", "🫵"]);
   assert.equal(repeated.modifiers.repetitionPenalty, 16);
   assert.equal(varied.modifiers.repetitionPenalty, 0);
   assert.ok(varied.power > repeated.power, `${varied.power} should beat ${repeated.power}`);
@@ -73,7 +73,7 @@ test("repetition penalty makes face-rolled combos meaningfully weaker than varie
 });
 
 test("specific gesture trees unlock named elemental ultimates", () => {
-  const spell = buildSpell(["🖖🏻", "🤟🏻", "🤞🏻", "✌🏻", "☝🏻"]);
+  const spell = buildSpell(["🖖", "🤟", "🤞", "✌", "☝"]);
   assert.equal(spell.ultimate.name, "Celestial Mystic Seal");
   assert.equal(spell.ultimate.element, "Astral");
   assert.ok(spell.power > 100);
@@ -81,8 +81,8 @@ test("specific gesture trees unlock named elemental ultimates", () => {
 
 
 test("elemental ultimates unlock from any permutation of the five required gestures", () => {
-  const canonical = buildSpell(["🖖🏻", "🤟🏻", "🤞🏻", "✌🏻", "☝🏻"]);
-  const permuted = buildSpell(["☝🏻", "✌🏻", "🤞🏻", "🤟🏻", "🖖🏻"]);
+  const canonical = buildSpell(["🖖", "🤟", "🤞", "✌", "☝"]);
+  const permuted = buildSpell(["☝", "✌", "🤞", "🤟", "🖖"]);
   assert.equal(permuted.ultimate.name, canonical.ultimate.name);
   assert.equal(permuted.ultimate.element, canonical.ultimate.element);
 });
@@ -128,7 +128,7 @@ test("gesture catalog gives every outcome symbol a name and names each gesture o
 });
 
 test("analyze returns a named outcome matrix for every symbol in the combo", async () => {
-  const response = await worker.fetch(new Request(`https://example.com/analyze?combo=${seal("👊🏻🖖🏻")}`), {});
+  const response = await worker.fetch(new Request(`https://example.com/analyze?combo=${seal("👊🖖")}`), {});
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.equal(typeof data.outcomeName, "string");

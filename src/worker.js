@@ -1,7 +1,7 @@
 import { handleTelegramConfig, handleTelegramStatus, handleTelegramWebhook } from "./telegram-bot.js";
 const APP_NAME = "emoji-alchemy-worker";
 const APP_VERSION = "1.1.0";
-const FINISHER = "🙏🏻";
+const FINISHER = "🙏";
 const MAX_HAND_SIGNS = 5;
 const PUBLIC_BALANCE_MAX_LENGTH = 3;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
@@ -95,55 +95,55 @@ aiButler:mergeAiButler(base.aiButler)
 
 const GESTURES = {
 
-"💪🏻":{name:"Flex",atk:6,def:2,spc:2,type:"kinetic"},
-"👏🏻":{name:"Clap",atk:3,def:4,spc:3,type:"barrier"},
-"👍🏻":{name:"Up",atk:4,def:4,spc:2,type:"barrier"},
-"👎🏻":{name:"Down",atk:4,def:3,spc:3,type:"kinetic"},
+"💪":{name:"Flex",atk:6,def:2,spc:2,type:"kinetic"},
+"👏":{name:"Clap",atk:3,def:4,spc:3,type:"barrier"},
+"👍":{name:"Up",atk:4,def:4,spc:2,type:"barrier"},
+"👎":{name:"Down",atk:4,def:3,spc:3,type:"kinetic"},
 
-"🫶🏻":{name:"Heart",atk:2,def:5,spc:6,type:"mystic"},
-"🙌🏻":{name:"Raise",atk:4,def:4,spc:5,type:"mystic"},
-"👐🏻":{name:"Open",atk:3,def:6,spc:1,type:"barrier"},
-"🤲🏻":{name:"Cup",atk:1,def:6,spc:3,type:"barrier"},
-
-
-"🤜🏻":{name:"Right Hook",atk:9,def:1,spc:0,type:"kinetic"},
-"🤛🏻":{name:"Left Hook",atk:9,def:1,spc:0,type:"kinetic"},
-"✊🏻":{name:"Fist",atk:8,def:2,spc:0,type:"kinetic"},
-"👊🏻":{name:"Strike",atk:8,def:2,spc:0,type:"kinetic"},
+"🫶":{name:"Heart",atk:2,def:5,spc:6,type:"mystic"},
+"🙌":{name:"Raise",atk:4,def:4,spc:5,type:"mystic"},
+"👐":{name:"Open",atk:3,def:6,spc:1,type:"barrier"},
+"🤲":{name:"Cup",atk:1,def:6,spc:3,type:"barrier"},
 
 
-"🫸🏻":{name:"Thrust",atk:7,def:3,spc:0,type:"kinetic"},
-"🫷🏻":{name:"Reverse Thrust",atk:7,def:3,spc:0,type:"kinetic"},
+"🤜":{name:"Right Hook",atk:9,def:1,spc:0,type:"kinetic"},
+"🤛":{name:"Left Hook",atk:9,def:1,spc:0,type:"kinetic"},
+"✊":{name:"Fist",atk:8,def:2,spc:0,type:"kinetic"},
+"👊":{name:"Strike",atk:8,def:2,spc:0,type:"kinetic"},
 
 
-"🤚🏻":{name:"Guard",atk:1,def:8,spc:1,type:"barrier"},
-"🖐🏻":{name:"Palm",atk:2,def:8,spc:0,type:"barrier"},
-"✋🏻":{name:"Stop",atk:1,def:9,spc:0,type:"barrier"},
+"🫸":{name:"Thrust",atk:7,def:3,spc:0,type:"kinetic"},
+"🫷":{name:"Reverse Thrust",atk:7,def:3,spc:0,type:"kinetic"},
 
 
-"🖖🏻":{name:"Vulcan",atk:3,def:3,spc:9,type:"mystic"},
-"🤟🏻":{name:"Love",atk:2,def:4,spc:8,type:"mystic"},
-"🤞🏻":{name:"Cross",atk:4,def:3,spc:7,type:"mystic"},
-"✌🏻":{name:"Peace",atk:3,def:4,spc:7,type:"mystic"},
-"🤌🏻":{name:"Kiss",atk:4,def:4,spc:6,type:"mystic"},
-"🫳🏻":{name:"Palm Down",atk:5,def:4,spc:1,type:"barrier"},
-"🫴🏻":{name:"Palm Up",atk:3,def:5,spc:4,type:"mystic"},
-"🫲🏻":{name:"Leftward Hand",atk:5,def:3,spc:2,type:"kinetic"},
-"🫱🏻":{name:"Rightward Hand",atk:5,def:3,spc:2,type:"kinetic"},
-"👋🏻":{name:"Wave",atk:2,def:3,spc:7,type:"mystic"},
-"🫰🏻":{name:"Snap",atk:5,def:2,spc:7,type:"mystic"},
-"🤙🏻":{name:"Call",atk:3,def:3,spc:8,type:"mystic"},
-"🤏🏻":{name:"Pinch",atk:5,def:4,spc:5,type:"mystic"},
-"👌🏻":{name:"Focus",atk:4,def:5,spc:6,type:"mystic"},
-"🫵🏻":{name:"Challenge",atk:7,def:2,spc:3,type:"kinetic"},
-"👉🏻":{name:"Point Right",atk:5,def:2,spc:5,type:"kinetic"},
-"👈🏻":{name:"Point Left",atk:5,def:2,spc:5,type:"kinetic"},
-"☝🏻":{name:"Index Up",atk:3,def:4,spc:8,type:"mystic"},
-"👆🏻":{name:"Point Up",atk:4,def:3,spc:7,type:"mystic"},
-"👇🏻":{name:"Point Down",atk:6,def:4,spc:3,type:"kinetic"},
-"🖕🏻":{name:"Defiance",atk:8,def:1,spc:3,type:"kinetic"},
-"✍🏻":{name:"Script",atk:2,def:4,spc:8,type:"mystic"},
-"🤳🏻":{name:"Mirror",atk:2,def:6,spc:6,type:"barrier"}
+"🤚":{name:"Guard",atk:1,def:8,spc:1,type:"barrier"},
+"🖐":{name:"Palm",atk:2,def:8,spc:0,type:"barrier"},
+"✋":{name:"Stop",atk:1,def:9,spc:0,type:"barrier"},
+
+
+"🖖":{name:"Vulcan",atk:3,def:3,spc:9,type:"mystic"},
+"🤟":{name:"Love",atk:2,def:4,spc:8,type:"mystic"},
+"🤞":{name:"Cross",atk:4,def:3,spc:7,type:"mystic"},
+"✌":{name:"Peace",atk:3,def:4,spc:7,type:"mystic"},
+"🤌":{name:"Kiss",atk:4,def:4,spc:6,type:"mystic"},
+"🫳":{name:"Palm Down",atk:5,def:4,spc:1,type:"barrier"},
+"🫴":{name:"Palm Up",atk:3,def:5,spc:4,type:"mystic"},
+"🫲":{name:"Leftward Hand",atk:5,def:3,spc:2,type:"kinetic"},
+"🫱":{name:"Rightward Hand",atk:5,def:3,spc:2,type:"kinetic"},
+"👋":{name:"Wave",atk:2,def:3,spc:7,type:"mystic"},
+"🫰":{name:"Snap",atk:5,def:2,spc:7,type:"mystic"},
+"🤙":{name:"Call",atk:3,def:3,spc:8,type:"mystic"},
+"🤏":{name:"Pinch",atk:5,def:4,spc:5,type:"mystic"},
+"👌":{name:"Focus",atk:4,def:5,spc:6,type:"mystic"},
+"🫵":{name:"Challenge",atk:7,def:2,spc:3,type:"kinetic"},
+"👉":{name:"Point Right",atk:5,def:2,spc:5,type:"kinetic"},
+"👈":{name:"Point Left",atk:5,def:2,spc:5,type:"kinetic"},
+"☝":{name:"Index Up",atk:3,def:4,spc:8,type:"mystic"},
+"👆":{name:"Point Up",atk:4,def:3,spc:7,type:"mystic"},
+"👇":{name:"Point Down",atk:6,def:4,spc:3,type:"kinetic"},
+"🖕":{name:"Defiance",atk:8,def:1,spc:3,type:"kinetic"},
+"✍":{name:"Script",atk:2,def:4,spc:8,type:"mystic"},
+"🤳":{name:"Mirror",atk:2,def:6,spc:6,type:"barrier"}
 
 };
 
@@ -227,26 +227,26 @@ return [...signs].sort().join("");
 }
 
 const ELEMENTAL_ULTIMATES=Object.fromEntries([
-[["🤜🏻","🤛🏻","✊🏻","👊🏻","🖕🏻"],{name:"Meteor Fang Cataclysm",element:"Inferno",atk:28,def:0,spc:7}],
-[["🤚🏻","🖐🏻","✋🏻","👐🏻","🤲🏻"],{name:"World-Turtle Aegis",element:"Terra",atk:0,def:32,spc:4}],
-[["🖖🏻","🤟🏻","🤞🏻","✌🏻","☝🏻"],{name:"Celestial Mystic Seal",element:"Astral",atk:4,def:4,spc:32}],
-[["👏🏻","🙌🏻","🫶🏻","🫴🏻","👌🏻"],{name:"Aurora Heart Mandala",element:"Luminous",atk:6,def:14,spc:24}],
-[["👉🏻","👈🏻","👆🏻","👇🏻","🫵🏻"],{name:"Five-Point Thunder Sentence",element:"Storm",atk:22,def:5,spc:15}]
+[["🤜","🤛","✊","👊","🖕"],{name:"Meteor Fang Cataclysm",element:"Inferno",atk:28,def:0,spc:7}],
+[["🤚","🖐","✋","👐","🤲"],{name:"World-Turtle Aegis",element:"Terra",atk:0,def:32,spc:4}],
+[["🖖","🤟","🤞","✌","☝"],{name:"Celestial Mystic Seal",element:"Astral",atk:4,def:4,spc:32}],
+[["👏","🙌","🫶","🫴","👌"],{name:"Aurora Heart Mandala",element:"Luminous",atk:6,def:14,spc:24}],
+[["👉","👈","👆","👇","🫵"],{name:"Five-Point Thunder Sentence",element:"Storm",atk:22,def:5,spc:15}]
 ].map(([signs,ultimate])=>[ultimateKey(signs),ultimate]));
 
 const FINISHERS={
 
-"👊🏻":{
+"👊":{
 name:"Execution Blow",
 atk:15
 },
 
-"✋🏻":{
+"✋":{
 name:"Absolute Barrier",
 def:15
 },
 
-"🖖🏻":{
+"🖖":{
 name:"Astral Seal",
 spc:15
 }
@@ -300,7 +300,7 @@ summary:"Every command returns JSON. Unknown paths return a clear not-a-command 
 
 usage:[
 "Pick 1-5 hand signs.",
-"End every combo with 🙏🏻.",
+"End every combo with 🙏.",
 "URL encode emoji combos when you paste commands into a shell.",
 "Use GET commands for quick lookups and POST commands when sending JSON bodies.",
 "Admin config endpoints are locked until ADMIN_TOKEN or CONFIG_ADMIN_TOKEN is set with wrangler secret put; send that value as Bearer or X-Admin-Token."
@@ -310,16 +310,16 @@ commands:[
 {method:"GET",path:"/help",description:"Show this command guide with curl examples.",curl:"curl \"$BASE_URL/help\""},
 {method:"GET",path:"/changelog",description:"Show recent API and product changes.",curl:"curl \"$BASE_URL/changelog\""},
 {method:"GET",path:"/about",description:"Show service identity and current application version.",curl:"curl \"$BASE_URL/about\""},
-{method:"GET",path:"/lookup?combo=👊🏻🖖🏻🙏🏻",description:"Cast a sealed technique and receive its generated name, rank, stats and battle style.",curl:"curl \"$BASE_URL/lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
-{method:"GET",path:"/analyze?combo=👊🏻🖖🏻🙏🏻",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
+{method:"GET",path:"/lookup?combo=👊🖖🙏",description:"Cast a sealed technique and receive its generated name, rank, stats and battle style.",curl:"curl \"$BASE_URL/lookup?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F\""},
+{method:"GET",path:"/analyze?combo=👊🖖🙏",description:"Explain each hand sign in a technique and show how the final stats are built.",curl:"curl \"$BASE_URL/analyze?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F\""},
 {method:"GET",path:"/gestures",description:"List every available hand sign and its ATK, DEF, SPC and force type.",curl:"curl \"$BASE_URL/gestures\""},
 {method:"GET",path:"/rules",description:"Read the deterministic combat rules, force triangle, finisher rules and replay guarantees.",curl:"curl \"$BASE_URL/rules\""},
 {method:"GET",path:"/balance/simulate?maxLength=3",description:"Run the deterministic balance simulator over every 1-N gesture combo and report class/length win rates plus dominant combos.",curl:"curl \"$BASE_URL/balance/simulate?maxLength=3\""},
-{method:"GET",path:"/duel?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻🤟🏻🙏🏻",description:"Compare two sealed techniques and return the winner, damage, scores and force analysis.",curl:"curl \"$BASE_URL/duel?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%A4%9F%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
-{method:"GET",path:"/simulate?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻",description:"Run a deterministic duel that can be replayed from the same inputs.",curl:"curl \"$BASE_URL/simulate?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%AB%90%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB\""},
-{method:"GET",path:"/replay?combo=👊🏻🖖🏻🙏🏻&opponent=✋🏻👐🏻🙏🏻&matchId=MATCH-123",description:"Verify a previous deterministic match by passing the same combos and match id.",curl:"curl \"$BASE_URL/replay?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%96%96%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&opponent=%E2%9C%8B%F0%9F%8F%BB%F0%9F%AB%90%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB&matchId=MATCH-123\""},
+{method:"GET",path:"/duel?combo=👊🖖🙏&opponent=✋🤟🙏",description:"Compare two sealed techniques and return the winner, damage, scores and force analysis.",curl:"curl \"$BASE_URL/duel?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F&opponent=%E2%9C%8B%F0%9F%A4%9F%F0%9F%99%8F\""},
+{method:"GET",path:"/simulate?combo=👊🖖🙏&opponent=✋👐🙏",description:"Run a deterministic duel that can be replayed from the same inputs.",curl:"curl \"$BASE_URL/simulate?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F&opponent=%E2%9C%8B%F0%9F%AB%90%F0%9F%99%8F\""},
+{method:"GET",path:"/replay?combo=👊🖖🙏&opponent=✋👐🙏&matchId=MATCH-123",description:"Verify a previous deterministic match by passing the same combos and match id.",curl:"curl \"$BASE_URL/replay?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F&opponent=%E2%9C%8B%F0%9F%AB%90%F0%9F%99%8F&matchId=MATCH-123\""},
 {method:"GET",path:"/train",description:"Get a step-by-step starter lesson for building a combo.",curl:"curl \"$BASE_URL/train\""},
-{method:"POST",path:"/queue",description:"Submit a sealed technique into the asynchronous arena queue.",curl:"curl -X POST \"$BASE_URL/queue\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"shinobi\",\"combo\":\"👊🏻🖖🏻🙏🏻\",\"includeButler\":true}'"},
+{method:"POST",path:"/queue",description:"Submit a sealed technique into the asynchronous arena queue.",curl:"curl -X POST \"$BASE_URL/queue\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"shinobi\",\"combo\":\"👊🖖🙏\",\"includeButler\":true}'"},
 {method:"GET",path:"/arena",description:"View persistent arena queue, history, leaderboard and AI Butler state.",curl:"curl \"$BASE_URL/arena\""},
 {method:"GET",path:"/battle/:id",description:"Replay a completed arena battle from history.",curl:"curl \"$BASE_URL/battle/BATTLE-ID\""},
 {method:"GET",path:"/butler",description:"Inspect the evolving AI Butler opponent and its next combo.",curl:"curl \"$BASE_URL/butler\""},
@@ -330,7 +330,7 @@ commands:[
 {method:"POST",path:"/ai/chronicle",description:"Send raw match JSON to Cloudflare AI and receive a dark anime battle chronicle using the configured model.",curl:"curl -X POST \"$BASE_URL/ai/chronicle\" -H \"Content-Type: application/json\" -d '{\"match\":{\"id\":\"MATCH-123\"},\"rounds\":[],\"winner\":\"Player 1\"}'"},
 {method:"POST",path:"/player/create",description:"Create a persistent D1 player profile.",curl:"curl -X POST \"$BASE_URL/player/create\" -H \"Content-Type: application/json\" -d '{\"name\":\"shinobi\"}'"},
 {method:"GET",path:"/player?id=PLAYER-ID",description:"Load a player profile.",curl:"curl \"$BASE_URL/player?id=PLAYER-ID\""},
-{method:"POST",path:"/jutsu/save",description:"Save a player's signature jutsu.",curl:"curl -X POST \"$BASE_URL/jutsu/save\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"PLAYER-ID\",\"name\":\"Astral Jab\",\"combo\":\"👊🏻🖖🏻🙏🏻\"}'"},
+{method:"POST",path:"/jutsu/save",description:"Save a player's signature jutsu.",curl:"curl -X POST \"$BASE_URL/jutsu/save\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"PLAYER-ID\",\"name\":\"Astral Jab\",\"combo\":\"👊🖖🙏\"}'"},
 {method:"GET",path:"/stats?id=PLAYER-ID",description:"View player progression, battle history and signature jutsu.",curl:"curl \"$BASE_URL/stats?id=PLAYER-ID\""}
 ]
 
@@ -349,7 +349,7 @@ Emoji Jutsu is a deterministic combat language.
 
 Create a sequence of hand signs.
 
-Every technique MUST end with 🙏🏻.
+Every technique MUST end with 🙏.
 
 The finisher seals the technique.
 
@@ -374,7 +374,7 @@ Barrier > Kinetic
 Repeat matching forces for synergy bonuses, but repeating the exact same hand sign adds a repetition penalty.
 Longer combos add complexity, cost, and risk; each hand sign after the third adds extra risk so max-length combos are not always safest.
 Risk lowers duel score and can create a small backlash in close exchanges.
-Last hand sign before 🙏🏻 can unlock a finisher.
+Last hand sign before 🙏 can unlock a finisher.
 
 Duel simulations are deterministic: the same combos and match ID always replay the same result.
 Technique IDs are generated from each sealed combo for leaderboards and match history.
@@ -397,14 +397,14 @@ Step 2:
 Mix power, defense and energy.
 
 Step 3:
-Seal your technique with 🙏🏻.
+Seal your technique with 🙏.
 
 Step 4:
 Discover your spell.
 
 Example:
 
-💪🏻👏🏻👍🏻🫶🏻🙌🏻🙏🏻
+💪👏👍🫶🙌🙏
 `
 
 }
@@ -1289,15 +1289,15 @@ arena.leaderboard[loserId].losses++;
 function aiComboForButler(ai){
 
 if(ai.winRate<0.4)
-return "✋🏻👐🏻🤲🏻🙏🏻";
+return "✋👐🤲🙏";
 
 if(ai.preferredStyle==="Kinetic")
-return "👊🏻🤜🏻✊🏻🙏🏻";
+return "👊🤜✊🙏";
 
 if(ai.preferredStyle==="Barrier")
-return "✋🏻🤚🏻👐🏻🙏🏻";
+return "✋🤚👐🙏";
 
-return "🖖🏻🤞🏻🤟🏻🙏🏻";
+return "🖖🤞🤟🙏";
 
 }
 
@@ -1428,13 +1428,13 @@ try{
 decoded=decodeURIComponent(input);
 }catch{
 return {
-error:"Combo could not be decoded. Please URL-encode emoji combos, for example /lookup?combo=%F0%9F%91%8A%F0%9F%8F%BB%F0%9F%99%8F%F0%9F%8F%BB",
+error:"Combo could not be decoded. Please URL-encode emoji combos, for example /lookup?combo=%F0%9F%91%8A%F0%9F%99%8F",
 status:400
 };
 }
 
 if(!decoded.endsWith(FINISHER))
-return {error:"Every technique must end with 🙏🏻",status:400};
+return {error:"Every technique must end with 🙏",status:400};
 
 const core=decoded.slice(0,decoded.length-FINISHER.length);
 
@@ -1444,10 +1444,10 @@ if(!combo)
 return {error:"Unknown gesture detected",status:400};
 
 if(combo.length<1)
-return {error:"Choose at least one hand sign before 🙏🏻",status:400};
+return {error:"Choose at least one hand sign before 🙏",status:400};
 
 if(combo.length>MAX_HAND_SIGNS)
-return {error:`Training rules allow 1-${MAX_HAND_SIGNS} hand signs before 🙏🏻`,status:400};
+return {error:`Training rules allow 1-${MAX_HAND_SIGNS} hand signs before 🙏`,status:400};
 
 const spell=applyFinisher(buildSpell(combo),combo[combo.length-1]);
 
@@ -1759,9 +1759,9 @@ return `<!doctype html>
 <section class="card wide"><h2>Connection</h2><label>Admin token</label><input id="adminToken" type="password" placeholder="ADMIN_TOKEN for config changes"><div class="row"><div><label>Worker base URL</label><input id="baseUrl" placeholder="https://example.workers.dev"></div><div><label>Telegram webhook secret token</label><input id="webhookSecret" type="password" placeholder="X-Telegram-Bot-Api-Secret-Token"></div></div><label>Telegram bot token</label><input id="botToken" type="password" placeholder="123456:ABC... used for setWebhook/getWebhookInfo/deleteWebhook"><div class="actions"><button onclick="saveBotToken()">Save token + set webhook</button><button class="secondary" onclick="setWebhook()">Set Telegram webhook only</button><button class="secondary" onclick="api('/telegram/status')">Check bot status</button><button class="secondary" onclick="telegramMethod('getWebhookInfo')">Get webhook info</button><button class="secondary" onclick="telegramMethod('deleteWebhook')">Delete webhook</button><a class="button secondary" href="/help" target="_blank">Open API help</a><a class="button secondary" href="/changelog" target="_blank">Open change log</a></div><p class="small">Webhook URL: <span class="kbd" id="webhookUrl"></span></p></section>
 <section class="card wide"><h2>Cloudflare AI chronicle</h2><div class="row"><div><label>Cloudflare account ID</label><input id="cfAccountId" placeholder="account id"></div><div><label>Cloudflare AI model</label><input id="cfModel" value="@cf/meta/llama-3.1-8b-instruct"></div></div><label>Cloudflare AI API token</label><input id="cfToken" type="password" placeholder="API token with Workers AI access"><label>Raw match JSON</label><textarea id="chronicleJson" placeholder='{"match":{"id":"MATCH-123"},"rounds":[],"winner":"Player 1"}'></textarea><div class="actions"><button onclick="saveAiConfig()">Save AI config</button><button class="secondary" onclick="loadAiConfig()">Load AI config</button><button class="good" onclick="chronicle()">Generate chronicle</button></div><p class="small">Curl: <span class="kbd">POST /ai/config</span> stores token/account/model; <span class="kbd">POST /ai/chronicle</span> sends match JSON to the configured model.</p></section>
 <section class="card"><h2>Player actions</h2><label>Username</label><input id="username" value="admin-player"><button onclick="createPlayer()">Create player</button><label>Player ID</label><input id="playerId" placeholder="UUID"><div class="actions"><button class="secondary" onclick="getPlayer()">Load player</button><button class="secondary" onclick="getStats()">Stats</button></div></section>
-<section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🏻🖖🏻🙏🏻"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
+<section class="card"><h2>Jutsu lab</h2><label>Combo</label><input id="combo" value="👊🖖🙏"><label>Signature name</label><input id="jutsuName" value="Astral Jab"><div class="actions"><button onclick="lookup()">Lookup</button><button class="secondary" onclick="analyze()">Analyze</button><button class="good" onclick="saveJutsu()">Save signature</button></div></section>
 <section class="card"><h2>Arena controls</h2><label>Queue player ID</label><input id="queuePlayer" placeholder="player id or anonymous"><label><input id="includeButler" type="checkbox" style="width:auto" checked> Include AI Butler</label><div class="actions"><button onclick="queueCombo()">Queue combo</button><button class="secondary" onclick="loadArena()">Refresh arena</button><button class="secondary" onclick="loadButler()">AI Butler</button></div></section>
-<section class="card"><h2>Duel simulator</h2><label>Opponent combo</label><input id="opponent" value="✋🏻🤟🏻🙏🏻"><div class="row"><div><label>Player A ID (optional)</label><input id="playerA"></div><div><label>Player B ID (optional)</label><input id="playerB"></div></div><button onclick="simulate()">Run duel</button></section>
+<section class="card"><h2>Duel simulator</h2><label>Opponent combo</label><input id="opponent" value="✋🤟🙏"><div class="row"><div><label>Player A ID (optional)</label><input id="playerA"></div><div><label>Player B ID (optional)</label><input id="playerB"></div></div><button onclick="simulate()">Run duel</button></section>
 <section class="card wide"><h2>System shortcuts</h2><div class="actions"><button class="secondary" onclick="api('/gestures')">Gestures</button><button class="secondary" onclick="api('/rules')">Rules</button><button class="secondary" onclick="api('/train')">Training</button><button class="secondary" onclick="api('/changelog')">Change log</button><button class="secondary" onclick="api('/queue')">Queue</button></div></section>
 <section class="card wide"><h2>Result <span id="status" class="status"></span></h2><pre id="result" class="result">Ready.</pre></section>
 </main>
