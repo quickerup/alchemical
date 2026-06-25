@@ -92,8 +92,8 @@ async function verifyTelegramSecret(request, env) {
   return constantTimeStringEqual(request.headers.get("X-Telegram-Bot-Api-Secret-Token"), config.webhookSecret);
 }
 
-async function telegram(env, method, payload) {
-  const config = await getBotConfig(env);
+async function telegram(env, method, payload, explicitConfig = null) {
+  const config = explicitConfig || await getBotConfig(env);
   const response = await fetch(`${TELEGRAM_API}/bot${config.token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1145,7 +1145,7 @@ export async function handleTelegramConfig(request, env) {
       url: webhookUrl,
       secret_token: webhookSecret,
       allowed_updates: ["message", "callback_query"]
-    });
+    }, config);
   }
 
   return json({
