@@ -133,6 +133,7 @@ const GESTURES = {
 
 "🖖":{name:"Vulcan",atk:3,def:3,spc:9,type:"mystic"},
 "🤟":{name:"Love",atk:2,def:4,spc:8,type:"mystic"},
+"🤘":{name:"Horns",atk:6,def:2,spc:6,type:"mystic"},
 "🤞":{name:"Cross",atk:4,def:3,spc:7,type:"mystic"},
 "✌":{name:"Peace",atk:3,def:4,spc:7,type:"mystic"},
 "🤌":{name:"Kiss",atk:4,def:4,spc:6,type:"mystic"},
@@ -282,6 +283,7 @@ title:"Telegram polish and leaderboard routes",
 changes:[
 "Added CORS preflight handling, public /changelog, and /leaderboard routes.",
 "Added public rate limiting for /balance/simulate and listed /leaderboard in /help.",
+"Fixed lookup verification for skin-tone-modified hand signs and the horns hand sign after users hit failed seals; this frustration should never have happened in the first place.",
 "Improved Telegram bot previews, arena/profile displays, cancellation, typing indicators, and AI Butler combo selection."
 ]
 },

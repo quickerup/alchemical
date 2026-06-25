@@ -10,6 +10,10 @@ All notable Emoji Jutsu worker changes are documented here.
 - Added `GET /changelog` and `GET /leaderboard` route handling.
 - Added public rate limiting to `GET /balance/simulate`.
 
+### Fixed
+
+- Fixed lookup verification for skin-tone-modified hand-sign emoji and the horns hand sign after users hit failed seals; this frustration should never have happened in the first place.
+
 ### Improved
 
 - Improved Telegram bot gesture caching, lookup preview pruning, cancel handling, typing indicators, and richer arena/profile/jutsu displays.
