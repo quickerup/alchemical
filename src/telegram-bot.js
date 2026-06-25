@@ -247,6 +247,7 @@ const STATIC_BUTTONS = {
   duel: "⚔️ Duel",
   queue: "📥 Queue",
   arena: "🏟️ Arena",
+  rankings: "🏆 Rankings",
   butler: "🤖 Butler",
   myjutsu: "📜 My Jutsu",
   profile: "👤 Profile",
@@ -264,6 +265,7 @@ function commandList(playerId) {
     `${STATIC_BUTTONS.duel} — duel a saved rival or paste a combo`,
     `${STATIC_BUTTONS.queue} — submit your last sealed technique to the arena`,
     `${STATIC_BUTTONS.arena} — leaderboard and queue`,
+    `${STATIC_BUTTONS.rankings} — ELO ladder and rank tier`,
     `${STATIC_BUTTONS.butler} — inspect the AI Butler`,
     `${STATIC_BUTTONS.myjutsu} — saved signature techniques`,
     `${STATIC_BUTTONS.profile} — your stats`,
@@ -276,6 +278,7 @@ function mainMenuKeyboard() {
     inline_keyboard: [
       [{ text: STATIC_BUTTONS.cast, callback_data: "nav:cast" }, { text: STATIC_BUTTONS.duel, callback_data: "nav:duel" }],
       [{ text: STATIC_BUTTONS.queue, callback_data: "nav:queue" }, { text: STATIC_BUTTONS.arena, callback_data: "nav:arena" }],
+      [{ text: STATIC_BUTTONS.rankings, callback_data: "nav:rankings" }],
       [{ text: STATIC_BUTTONS.myjutsu, callback_data: "nav:myjutsu" }, { text: STATIC_BUTTONS.profile, callback_data: "nav:profile" }],
       [{ text: STATIC_BUTTONS.draw, callback_data: "nav:draw" }, { text: STATIC_BUTTONS.butler, callback_data: "nav:butler" }],
       [{ text: STATIC_BUTTONS.help, callback_data: "nav:help" }]
@@ -572,7 +575,7 @@ function medalForRank(index) {
 }
 
 function formatArena(arena) {
-  const leaders = (arena.leaderboard || []).slice(0, 5).map((p, i) => `${medalForRank(i)} ${p.playerId}: ${p.wins}W/${p.losses}L/${p.draws}D • ${percent(playerWinRate(p))} WR`).join("\n") || "No battles yet.";
+  const leaders = (arena.leaderboard || []).slice(0, 5).map((p, i) => `${medalForRank(i)} ${p.playerId}: ${p.rating ?? "—"} ${p.rank || "Bronze"} • ${p.wins}W/${p.losses}L • ${percent(playerWinRate(p))} WR`).join("\n") || "No battles yet.";
   return `Arena queue: ${(arena.queue || []).length}\nActive battles: ${(arena.activeBattles || []).length}\nRecent battles: ${(arena.history || []).length}\n\nLeaderboard:\n${leaders}`;
 }
 
@@ -708,6 +711,16 @@ async function showArena(request, env, chatId, editMessageId = null) {
   return sendOrEdit(env, chatId, formatArena(arena.data), screenKeyboard([[{ text: "🔄 Refresh Arena", callback_data: "nav:arena" }]]), editMessageId);
 }
 
+async function showRankings(request, env, chatId, session, editMessageId = null) {
+  await sendTypingIndicator(env, chatId);
+  const board = await callWorkerJson(request, "/leaderboard");
+  const self = session?.playerId ? await callWorkerJson(request, `/rank?id=${encodeURIComponent(session.playerId)}`) : null;
+  const leaders = (board.data?.leaderboard || []).slice(0, 10).map((p, i) => `${medalForRank(i)} ${p.playerId}: ${p.rating} ${p.rank} • ${p.wins}W/${p.losses}L`).join("\n") || "No ranked duels yet.";
+  const me = self?.ok ? `\n\nYour rank: ${self.data.rank.rating} ${self.data.rank.rank} • ${self.data.rank.wins}W/${self.data.rank.losses}L` : "";
+  const tiers = (board.data?.ranks || ["Bronze", "Silver", "Gold", "Platinum", "Astral", "Mythic"]).join(" → ");
+  return sendOrEdit(env, chatId, `🏆 Rankings\n${tiers}\n\n${leaders}${me}`, screenKeyboard([[{ text: "🔄 Refresh Rankings", callback_data: "nav:rankings" }]]), editMessageId);
+}
+
 async function showButler(request, env, chatId, editMessageId = null) {
   const butler = await callWorkerJson(request, "/butler");
   const text = butler.ok
@@ -781,6 +794,10 @@ async function handleMessage(request, env, message) {
     return showArena(request, env, chat.id);
   }
 
+  if (command === "/leaderboard" || command === "/rank" || command === STATIC_BUTTONS.rankings) {
+    return showRankings(request, env, chat.id, session);
+  }
+
   if (command === "/butler" || command === STATIC_BUTTONS.butler) {
     return showButler(request, env, chat.id);
   }
@@ -829,6 +846,7 @@ async function handleFrontEndCallback(request, env, callback) {
       return queueCombo(request, env, chatId, session, sealed);
     }
     if (action === "arena") return showArena(request, env, chatId, callback.message.message_id);
+    if (action === "rankings") return showRankings(request, env, chatId, session, callback.message.message_id);
     if (action === "butler") return showButler(request, env, chatId, callback.message.message_id);
     if (action === "profile") return showProfile(request, env, chatId, session, callback.message.message_id);
     if (action === "myjutsu") return showMyJutsu(request, env, chatId, session, callback.message.message_id);

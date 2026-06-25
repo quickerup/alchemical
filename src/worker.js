@@ -42,6 +42,10 @@ queue:[],
 activeBattles:[],
 history:[],
 leaderboard:{},
+player_rating:{},
+player_wins:{},
+player_losses:{},
+player_rank:{},
 aiButler:{
 id:"AI-BUTLER-1",
 name:"AI Butler",
@@ -88,6 +92,10 @@ queue:Array.isArray(base.queue) ? base.queue : [],
 activeBattles:Array.isArray(base.activeBattles) ? base.activeBattles : [],
 history:Array.isArray(base.history) ? base.history : [],
 leaderboard:base.leaderboard && typeof base.leaderboard==="object" ? base.leaderboard : {},
+player_rating:base.player_rating && typeof base.player_rating==="object" ? base.player_rating : {},
+player_wins:base.player_wins && typeof base.player_wins==="object" ? base.player_wins : {},
+player_losses:base.player_losses && typeof base.player_losses==="object" ? base.player_losses : {},
+player_rank:base.player_rank && typeof base.player_rank==="object" ? base.player_rank : {},
 aiButler:mergeAiButler(base.aiButler)
 };
 }
@@ -964,6 +972,10 @@ MEMORY_ARENA.queue=arena.queue;
 MEMORY_ARENA.activeBattles=arena.activeBattles;
 MEMORY_ARENA.history=arena.history;
 MEMORY_ARENA.leaderboard=arena.leaderboard;
+MEMORY_ARENA.player_rating=arena.player_rating;
+MEMORY_ARENA.player_wins=arena.player_wins;
+MEMORY_ARENA.player_losses=arena.player_losses;
+MEMORY_ARENA.player_rank=arena.player_rank;
 MEMORY_ARENA.aiButler=arena.aiButler;
 
 }
@@ -1298,6 +1310,97 @@ arena.leaderboard[loserId].losses++;
 
 
 
+const RANKED_INITIAL_RATING = 1000;
+const RANKED_K_FACTOR = 32;
+const RANK_TIERS = [
+{ name: "Bronze", min: 0 },
+{ name: "Silver", min: 1100 },
+{ name: "Gold", min: 1250 },
+{ name: "Platinum", min: 1400 },
+{ name: "Astral", min: 1600 },
+{ name: "Mythic", min: 1800 }
+];
+
+function rankForRating(rating){
+const safeRating=Number.isFinite(Number(rating)) ? Number(rating) : RANKED_INITIAL_RATING;
+return [...RANK_TIERS].reverse().find(tier=>safeRating>=tier.min)?.name || RANK_TIERS[0].name;
+}
+
+function ensureRankedPlayer(arena,playerId){
+const id=String(playerId || "anonymous");
+arena.player_rating ||= {};
+arena.player_wins ||= {};
+arena.player_losses ||= {};
+arena.player_rank ||= {};
+if(!Number.isFinite(Number(arena.player_rating[id])))
+arena.player_rating[id]=RANKED_INITIAL_RATING;
+arena.player_wins[id]=Number(arena.player_wins[id] || 0);
+arena.player_losses[id]=Number(arena.player_losses[id] || 0);
+arena.player_rank[id]=rankForRating(arena.player_rating[id]);
+return {
+playerId:id,
+rating:Number(arena.player_rating[id]),
+wins:arena.player_wins[id],
+losses:arena.player_losses[id],
+rank:arena.player_rank[id]
+};
+}
+
+function applyRankedResult(arena,playerId,opponentId,result){
+const player=ensureRankedPlayer(arena,playerId);
+const opponent=ensureRankedPlayer(arena,opponentId);
+const expected=1/(1+Math.pow(10,(opponent.rating-player.rating)/400));
+const newRating=player.rating + RANKED_K_FACTOR*(result-expected);
+arena.player_rating[player.playerId]=Math.round(newRating);
+if(result===1)
+arena.player_wins[player.playerId]=player.wins+1;
+else if(result===0)
+arena.player_losses[player.playerId]=player.losses+1;
+arena.player_rank[player.playerId]=rankForRating(arena.player_rating[player.playerId]);
+return {
+...ensureRankedPlayer(arena,player.playerId),
+previousRating:player.rating,
+expected:Number(expected.toFixed(4)),
+ratingChange:arena.player_rating[player.playerId]-player.rating
+};
+}
+
+function recordRankedDuel(arena,playerA,playerB,winnerId){
+if(!playerA || !playerB || playerA===playerB)
+return null;
+const beforeA=ensureRankedPlayer(arena,playerA);
+const beforeB=ensureRankedPlayer(arena,playerB);
+const resultA=winnerId==="Draw" ? 0.5 : winnerId===playerA ? 1 : 0;
+const resultB=winnerId==="Draw" ? 0.5 : winnerId===playerB ? 1 : 0;
+const expectedA=1/(1+Math.pow(10,(beforeB.rating-beforeA.rating)/400));
+const expectedB=1/(1+Math.pow(10,(beforeA.rating-beforeB.rating)/400));
+arena.player_rating[beforeA.playerId]=Math.round(beforeA.rating + RANKED_K_FACTOR*(resultA-expectedA));
+arena.player_rating[beforeB.playerId]=Math.round(beforeB.rating + RANKED_K_FACTOR*(resultB-expectedB));
+if(resultA===1) arena.player_wins[beforeA.playerId]=beforeA.wins+1;
+else if(resultA===0) arena.player_losses[beforeA.playerId]=beforeA.losses+1;
+if(resultB===1) arena.player_wins[beforeB.playerId]=beforeB.wins+1;
+else if(resultB===0) arena.player_losses[beforeB.playerId]=beforeB.losses+1;
+arena.player_rank[beforeA.playerId]=rankForRating(arena.player_rating[beforeA.playerId]);
+arena.player_rank[beforeB.playerId]=rankForRating(arena.player_rating[beforeB.playerId]);
+const afterA=ensureRankedPlayer(arena,beforeA.playerId);
+const afterB=ensureRankedPlayer(arena,beforeB.playerId);
+return {
+[beforeA.playerId]:{...afterA,previousRating:beforeA.rating,expected:Number(expectedA.toFixed(4)),ratingChange:afterA.rating-beforeA.rating},
+[beforeB.playerId]:{...afterB,previousRating:beforeB.rating,expected:Number(expectedB.toFixed(4)),ratingChange:afterB.rating-beforeB.rating}
+};
+}
+
+function rankedLeaderboard(arena){
+const ids=new Set([
+...Object.keys(arena.player_rating || {}),
+...Object.keys(arena.player_wins || {}),
+...Object.keys(arena.player_losses || {})
+]);
+return [...ids].map(id=>ensureRankedPlayer(arena,id))
+.map(row=>({ ...row, battles:row.wins+row.losses, winRate:row.wins+row.losses ? Number((row.wins/(row.wins+row.losses)).toFixed(4)) : 0 }))
+.sort((a,b)=>b.rating-a.rating || b.wins-a.wins || a.losses-b.losses || a.playerId.localeCompare(b.playerId));
+}
+
 function aiComboForButler(ai){
 
 const winRate=Number(ai?.winRate ?? 0.5);
@@ -1402,6 +1505,9 @@ const replay=await simulateBattle(player,opponent,battleId);
 await persistDuelResult(env,{playerA:first.playerId,playerB:second.playerId,comboA:first.combo,comboB:second.combo,replay});
 const winnerId=replay.winner==="Player 1" ? first.playerId : replay.winner==="Player 2" ? second.playerId : "Draw";
 
+recordLeaderboard(arena,first.playerId,second.playerId,winnerId==="Draw");
+const ranked=recordRankedDuel(arena,first.playerId,second.playerId,winnerId);
+
 const battle={
 id:battleId,
 status:"complete",
@@ -1415,11 +1521,11 @@ timeline:[
 winner:winnerId,
 replay,
 createdAt:new Date().toISOString(),
-completedAt:new Date().toISOString()
+completedAt:new Date().toISOString(),
+ranked
 };
 
 arena.history.unshift(battle);
-recordLeaderboard(arena,first.playerId,second.playerId,winnerId==="Draw");
 
 if(first.isAi || second.isAi){
 const aiOpponent=first.isAi ? second : first;
@@ -1887,6 +1993,9 @@ FORCE_ADVANTAGE_SCALE,
 buildSpell,
 forceAdvantage,
 getArenaPersistenceMode,
+rankForRating,
+rankedLeaderboard,
+recordRankedDuel,
 parseTechnique,
 scoreDuelist,
 simulateBattle,
@@ -2005,13 +2114,14 @@ return json(CODEX.train);
 
 
 
-if(path==="/arena" || path==="/leaderboard" || path==="/butler" || path.startsWith("/battle/") || path==="/queue"){
+if(path==="/arena" || path==="/leaderboard" || path==="/rank" || path==="/butler" || path.startsWith("/battle/") || path==="/queue"){
 const arena=await loadArena(env);
 
-const rankedLeaderboard=Object.values(arena.leaderboard).map(row=>({
+const legacyLeaderboard=Object.values(arena.leaderboard).map(row=>({
 ...row,
 winRate:row.battles ? Number((row.wins/row.battles).toFixed(4)) : 0
 })).sort((a,b)=>b.wins-a.wins || b.winRate-a.winRate || a.losses-b.losses);
+const rankedRows=rankedLeaderboard(arena);
 
 if(path==="/arena")
 return json({
@@ -2019,16 +2129,26 @@ persistence:getArenaPersistenceMode(env),
 queue:arena.queue,
 activeBattles:arena.activeBattles,
 history:arena.history.slice(0,25),
-leaderboard:rankedLeaderboard,
+leaderboard:rankedRows,
+legacyLeaderboard,
 aiButler:arena.aiButler
 });
 
 if(path==="/leaderboard")
 return json({
 persistence:getArenaPersistenceMode(env),
-leaderboard:rankedLeaderboard,
-count:rankedLeaderboard.length
+leaderboard:rankedRows,
+legacyLeaderboard,
+ranks:RANK_TIERS.map(tier=>tier.name),
+count:rankedRows.length
 });
+
+if(path==="/rank"){
+const playerId=url.searchParams.get("id") || url.searchParams.get("player");
+if(!playerId)
+return json({error:"Missing player id"},400);
+return json({rank:ensureRankedPlayer(arena,playerId),ranks:RANK_TIERS.map(tier=>tier.name)});
+}
 
 if(path==="/butler")
 return json({
@@ -2165,10 +2285,24 @@ comboB:decoratedOpponent.decoded,
 replay
 });
 
-if(playerA===MEMORY_ARENA.aiButler.id || playerB===MEMORY_ARENA.aiButler.id){
-const arena=await loadArena(env);
+let ranked=null;
 const winnerId=replay.winner==="Player 1" ? playerA : replay.winner==="Player 2" ? playerB : "Draw";
-const aiOpponent=playerA===MEMORY_ARENA.aiButler.id ? decoratedOpponent : parsed;
+if(playerA && playerB){
+const arena=await loadArena(env);
+ranked=recordRankedDuel(arena,playerA,playerB,winnerId);
+if(playerA===arena.aiButler.id || playerB===arena.aiButler.id){
+const aiOpponent=playerA===arena.aiButler.id ? decoratedOpponent : parsed;
+arena.aiButler=updateAiButlerAfterBattle(arena.aiButler,{
+battleId:replay.match.id,
+winnerId,
+aiOpponent,
+completedAt:new Date().toISOString()
+});
+}
+await saveArena(env,arena);
+}else if(playerA===MEMORY_ARENA.aiButler.id || playerB===MEMORY_ARENA.aiButler.id){
+const arena=await loadArena(env);
+const aiOpponent=playerA===arena.aiButler.id ? decoratedOpponent : parsed;
 arena.aiButler=updateAiButlerAfterBattle(arena.aiButler,{
 battleId:replay.match.id,
 winnerId,
@@ -2183,7 +2317,8 @@ status:"success",
 ...replay,
 combo:{id,name,outcome:parsed.outcome,technique:decoded,class:spell.class,rank:rank(spell),stats:spell},
 opponent:{id:decoratedOpponent.id,name:decoratedOpponent.name,outcome:decoratedOpponent.outcome,technique:decoratedOpponent.decoded,class:decoratedOpponent.spell.class,rank:rank(decoratedOpponent.spell),stats:decoratedOpponent.spell},
-forceRule:"Kinetic > Mystic > Barrier > Kinetic"
+forceRule:"Kinetic > Mystic > Barrier > Kinetic",
+ranked
 });
 
 }
