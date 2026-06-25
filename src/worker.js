@@ -51,16 +51,29 @@ adaptationLevel:0.1
 }
 };
 
+function arenaKvNamespace(env){
+return env?.ARENA_KV || env?.KV_BINDING || null;
+}
+
 function getArenaPersistenceMode(env){
 
 if(env?.ARENA_KV)
-return {mode:"kv",durable:true,warning:null};
+return {mode:"kv",binding:"ARENA_KV",durable:true,warning:null};
+
+if(env?.KV_BINDING)
+return {
+mode:"kv",
+binding:"KV_BINDING",
+durable:true,
+warning:"ARENA_KV is not bound; using KV_BINDING for arena state. Create and bind a dedicated ARENA_KV namespace when you need isolated arena storage."
+};
 
 return {
 mode:"memory",
+binding:null,
 durable:false,
-warning:"ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
-productionError:"ARENA_KV must be bound in production; memory fallback is development-only and loses live matchmaking state."
+warning:"No KV namespace is bound for arena state; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
+productionError:"A KV namespace must be bound for production arena state; bind ARENA_KV or KV_BINDING before deploying production traffic."
 };
 
 }
@@ -135,24 +148,76 @@ const GESTURES = {
 };
 
 const NON_HAND_OUTCOMES = [
-"🔥", "🛡️", "🔮", "⚡", "🌊", "🌪️", "🌋", "🪨", "🌙", "☀️",
-"⭐", "💫", "🌈", "❄️", "🌿", "🍄", "🐉", "🦊", "🐺", "🦅",
-"🐍", "🦂", "🕸️", "💎", "🧲", "🧪", "🪬", "🧿", "🕯️", "🗝️",
-"🧭", "⏳", "🌀", "💥", "☄️", "🌌", "🏔️", "🌧️", "🎭", "🎲"
+{symbol:"🔥",name:"Ember Crown"},
+{symbol:"🛡️",name:"Aegis Ward"},
+{symbol:"🔮",name:"Oracle Lens"},
+{symbol:"⚡",name:"Thunder Brand"},
+{symbol:"🌊",name:"Tidal Verse"},
+{symbol:"🌪️",name:"Cyclone Spiral"},
+{symbol:"🌋",name:"Volcanic Oath"},
+{symbol:"🪨",name:"Stone Root"},
+{symbol:"🌙",name:"Moonlit Veil"},
+{symbol:"☀️",name:"Solar Crest"},
+{symbol:"⭐",name:"Star Sigil"},
+{symbol:"💫",name:"Comet Halo"},
+{symbol:"🌈",name:"Prismatic Bridge"},
+{symbol:"❄️",name:"Frost Rune"},
+{symbol:"🌿",name:"Verdant Thread"},
+{symbol:"🍄",name:"Mycelium Bloom"},
+{symbol:"🐉",name:"Dragon Pulse"},
+{symbol:"🦊",name:"Fox Mirage"},
+{symbol:"🐺",name:"Wolf Howl"},
+{symbol:"🦅",name:"Eagle Ascendant"},
+{symbol:"🐍",name:"Serpent Coil"},
+{symbol:"🦂",name:"Scorpion Sting"},
+{symbol:"🕸️",name:"Spiderweb Snare"},
+{symbol:"💎",name:"Diamond Core"},
+{symbol:"🧲",name:"Magnet Chain"},
+{symbol:"🧪",name:"Alchemist Phial"},
+{symbol:"🪬",name:"Hamsa Ward"},
+{symbol:"🧿",name:"Evil Eye Seal"},
+{symbol:"🕯️",name:"Candlelit Vigil"},
+{symbol:"🗝️",name:"Keybearer Glyph"},
+{symbol:"🧭",name:"Compass Path"},
+{symbol:"⏳",name:"Hourglass Toll"},
+{symbol:"🌀",name:"Vortex Gate"},
+{symbol:"💥",name:"Impact Nova"},
+{symbol:"☄️",name:"Meteor Scar"},
+{symbol:"🌌",name:"Cosmic Expanse"},
+{symbol:"🏔️",name:"Mountain Throne"},
+{symbol:"🌧️",name:"Rainfall Lament"},
+{symbol:"🎭",name:"Mask of Fates"},
+{symbol:"🎲",name:"Dice Mandate"}
 ];
 
 function emojiSignature(value){
 return Array.from(value).reduce((total,char,index)=>total + char.codePointAt(0)*(index+1),0);
 }
 
-function outcomeForCast(cast){
+function outcomeDetailsForCast(cast){
 const signs=Array.isArray(cast) ? cast : [cast];
 const signature=signs.reduce((total,sign,index)=>total + emojiSignature(sign)*(index+1),0);
 return NON_HAND_OUTCOMES[signature % NON_HAND_OUTCOMES.length];
 }
 
+function outcomeForCast(cast){
+return outcomeDetailsForCast(cast).symbol;
+}
+
+function outcomeNameForCast(cast){
+return outcomeDetailsForCast(cast).name;
+}
+
+function outcomeNameMatrix(){
+return Object.fromEntries(NON_HAND_OUTCOMES.map(outcome=>[outcome.symbol,outcome.name]));
+}
+
 function outcomeMatrix(){
-return Object.fromEntries(Object.keys(GESTURES).map(gesture=>[gesture,outcomeForCast(gesture)]));
+return Object.fromEntries(Object.entries(GESTURES).map(([gesture,details])=>[gesture,{
+gestureName:details.name,
+outcome:outcomeForCast(gesture),
+outcomeName:outcomeNameForCast(gesture)
+}]));
 }
 
 
@@ -660,7 +725,8 @@ return {
 ...parsed,
 id:`JUTSU-${idHash.slice(0,5).toUpperCase()}`,
 name:describeTechnique(parsed.spell),
-outcome:outcomeForCast(parsed.combo)
+outcome:outcomeForCast(parsed.combo),
+outcomeName:outcomeNameForCast(parsed.combo)
 };
 
 }
@@ -842,7 +908,7 @@ return updated;
 
 
 function shouldForbidMemoryArena(env){
-return !env?.ARENA_KV && String(env?.ENVIRONMENT || env?.NODE_ENV || "").toLowerCase()==="production";
+return !arenaKvNamespace(env) && String(env?.ENVIRONMENT || env?.NODE_ENV || "").toLowerCase()==="production";
 }
 
 async function loadArena(env){
@@ -853,8 +919,9 @@ throw new Error(persistence.productionError);
 if(!persistence.durable)
 console.warn(persistence.warning);
 
-if(env?.ARENA_KV){
-const stored=await env.ARENA_KV.get(MEMORY_ARENA_KEY,"json");
+const arenaKv=arenaKvNamespace(env);
+if(arenaKv){
+const stored=await arenaKv.get(MEMORY_ARENA_KEY,"json");
 if(stored)
 return normalizeArena(stored);
 }
@@ -874,8 +941,9 @@ async function saveArena(env,arena){
 if(shouldForbidMemoryArena(env))
 throw new Error(getArenaPersistenceMode(env).productionError);
 
-if(env?.ARENA_KV)
-await env.ARENA_KV.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
+const arenaKv=arenaKvNamespace(env);
+if(arenaKv)
+await arenaKv.put(MEMORY_ARENA_KEY,JSON.stringify(arena));
 
 await persistAiButlerToD1(env,arena.aiButler);
 
@@ -1396,7 +1464,7 @@ return combo.map(e=>{
 let g=GESTURES[e];
 
 
-return `${e} ${g.name} → ${outcomeForCast(e)}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
+return `${e} ${g.name} → ${outcomeForCast(e)} ${outcomeNameForCast(e)}: +${g.atk} ATK +${g.def} DEF +${g.spc} SPC`;
 
 });
 
@@ -1970,7 +2038,11 @@ gestures:GESTURES,
 
 outcomes:outcomeMatrix(),
 
-outcomeLegend:NON_HAND_OUTCOMES
+outcomeNameMatrix:outcomeNameMatrix(),
+
+outcomeLegend:NON_HAND_OUTCOMES.map(outcome=>outcome.symbol),
+
+outcomeCatalog:NON_HAND_OUTCOMES
 
 });
 
@@ -2075,7 +2147,9 @@ technique:decoded,
 
 outcome:parsed.outcome,
 
-outcomeMatrix:combo.map(gesture=>({gesture,outcome:outcomeForCast(gesture)})),
+outcomeName:parsed.outcomeName,
+
+outcomeMatrix:combo.map(gesture=>({gesture,gestureName:GESTURES[gesture].name,outcome:outcomeForCast(gesture),outcomeName:outcomeNameForCast(gesture)})),
 
 breakdown:analyze(combo),
 

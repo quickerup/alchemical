@@ -20,13 +20,20 @@ const parse = combo => {
   return result.spell;
 };
 
-test("arena persistence mode reports volatile memory when ARENA_KV is missing", () => {
-  assert.deepEqual(getArenaPersistenceMode({ ARENA_KV: { get() {}, put() {} } }), { mode: "kv", durable: true, warning: null });
+test("arena persistence mode uses dedicated ARENA_KV, shared KV_BINDING, then volatile memory", () => {
+  assert.deepEqual(getArenaPersistenceMode({ ARENA_KV: { get() {}, put() {} } }), { mode: "kv", binding: "ARENA_KV", durable: true, warning: null });
+  assert.deepEqual(getArenaPersistenceMode({ KV_BINDING: { get() {}, put() {} } }), {
+    mode: "kv",
+    binding: "KV_BINDING",
+    durable: true,
+    warning: "ARENA_KV is not bound; using KV_BINDING for arena state. Create and bind a dedicated ARENA_KV namespace when you need isolated arena storage."
+  });
   assert.deepEqual(getArenaPersistenceMode({}), {
     mode: "memory",
+    binding: null,
     durable: false,
-    warning: "ARENA_KV is not bound; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
-    productionError: "ARENA_KV must be bound in production; memory fallback is development-only and loses live matchmaking state."
+    warning: "No KV namespace is bound for arena state; arena queue, active battles, and history are volatile and may reset when the Worker isolate is evicted.",
+    productionError: "A KV namespace must be bound for production arena state; bind ARENA_KV or KV_BINDING before deploying production traffic."
   });
 });
 
@@ -101,4 +108,32 @@ test("AI Butler keeps enough recent battle history for adaptation metrics", () =
   assert.equal(butler.history[0].battleId, `battle-${AI_BUTLER_HISTORY_LIMIT + 4}`);
   assert.equal(butler.history.at(-1).battleId, "battle-5");
   assert.equal(butler.preferredStyle, "Barrier");
+});
+
+test("gesture catalog gives every outcome symbol a name and names each gesture outcome", async () => {
+  const response = await worker.fetch(new Request("https://example.com/gestures"), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.outcomeLegend.length, data.outcomeCatalog.length);
+  assert.equal(Object.keys(data.outcomeNameMatrix).length, data.outcomeLegend.length);
+  for (const symbol of data.outcomeLegend) {
+    assert.equal(typeof data.outcomeNameMatrix[symbol], "string");
+    assert.ok(data.outcomeNameMatrix[symbol].length > 0);
+  }
+  for (const [gesture, outcome] of Object.entries(data.outcomes)) {
+    assert.equal(typeof outcome.gestureName, "string", `${gesture} should include its gesture name`);
+    assert.equal(typeof outcome.outcomeName, "string", `${gesture} should include its outcome name`);
+    assert.equal(data.outcomeNameMatrix[outcome.outcome], outcome.outcomeName);
+  }
+});
+
+test("analyze returns a named outcome matrix for every symbol in the combo", async () => {
+  const response = await worker.fetch(new Request(`https://example.com/analyze?combo=${seal("👊🏻🖖🏻")}`), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(typeof data.outcomeName, "string");
+  assert.deepEqual(data.outcomeMatrix.map(row => Object.keys(row)), [
+    ["gesture", "gestureName", "outcome", "outcomeName"],
+    ["gesture", "gestureName", "outcome", "outcomeName"]
+  ]);
 });
