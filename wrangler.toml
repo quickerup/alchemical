@@ -19,7 +19,8 @@ binding = "BOT_SESSIONS"
 id = "b14b9bfdb25e42008596447e4d931472"
 preview_id = "<ID_OF_PREVIEW_BOT_SESSIONS_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
 
-[[kv_namespaces]]
-binding = "ARENA_KV"
-id = "f0fb6f3c6ea54a2589ebc6f8b35ab7dd"
-preview_id = "<ID_OF_PREVIEW_ARENA_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
+# ARENA_KV is intentionally not hard-coded here because Cloudflare deploys
+# fail when this repository is connected to an account that does not own the
+# checked-in namespace id. Add the ARENA_KV binding in the Cloudflare dashboard
+# or restore an account-specific namespace id here when durable arena state is
+# required. Without it, the Worker uses the development memory fallback.
