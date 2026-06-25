@@ -7,6 +7,9 @@ import {
   buildSpell,
   forceAdvantage,
   getArenaPersistenceMode,
+  rankForRating,
+  rankedLeaderboard,
+  recordRankedDuel,
   parseTechnique,
   scoreDuelist,
   updateAiButlerAfterBattle,
@@ -154,4 +157,16 @@ test("telegram status diagnoses missing token without exposing secrets", async (
   assert.equal(data.configured.hasToken, false);
   assert.equal(data.tokenReturned, false);
   assert.equal(data.expectedWebhookUrl, "https://example.com/telegram/webhook");
+});
+
+test("ranked ladder applies ELO and rank tiers", () => {
+  const arena = { leaderboard: {}, player_rating: {}, player_wins: {}, player_losses: {}, player_rank: {} };
+  const ranked = recordRankedDuel(arena, "alice", "bob", "alice");
+  assert.equal(ranked.alice.previousRating, 1000);
+  assert.equal(ranked.alice.rating, 1016);
+  assert.equal(ranked.bob.rating, 984);
+  assert.equal(arena.player_wins.alice, 1);
+  assert.equal(arena.player_losses.bob, 1);
+  assert.equal(rankForRating(1800), "Mythic");
+  assert.deepEqual(rankedLeaderboard(arena).map(row => row.playerId), ["alice", "bob"]);
 });
