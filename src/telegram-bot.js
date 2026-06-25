@@ -496,7 +496,7 @@ async function handleCastCallback(request, env, callback) {
     await saveSession(env, chatId, session);
     const resultText = lookupSucceeded
       ? `Sealed: ${sealed} → ${technique.outcome || "✨"}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}\n${saveResult?.ok ? "Saved to My Jutsu." : "Sealed for this session; My Jutsu save is temporarily unavailable."}`
-      : `Sealed: ${sealed}\nTechnique lookup is temporarily unavailable. Try ${STATIC_BUTTONS.duel} or ${STATIC_BUTTONS.queue} in a moment.`;
+      : formatLookupFailureText("Sealed", sealed, lookupFailureReason);
 
     await telegram(env, "editMessageText", {
       chat_id: chatId,
@@ -560,7 +560,7 @@ async function handleDrawCallback(request, env, callback) {
     const stats = technique.stats || {};
     const text = lookupSucceeded
       ? `Draw sealed: ${sealed} → ${technique.outcome || "✨"}\n${technique.name} (${technique.rank})\nATK ${stats.atk} / DEF ${stats.def} / SPC ${stats.spc}\n${saveResult?.ok ? "Saved to My Jutsu." : "Sealed for this session; My Jutsu save is temporarily unavailable."}`
-      : `Draw sealed: ${sealed}\nTechnique lookup failed verification, so no active jutsu was saved.`;
+      : formatLookupFailureText("Draw sealed", sealed, lookupFailureReason);
     await telegram(env, "editMessageText", { chat_id: chatId, message_id: callback.message.message_id, text, reply_markup: mainMenuKeyboard() });
     await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: lookupSucceeded ? "Draw sealed." : "Lookup failed." });
     return;
@@ -595,6 +595,14 @@ function lookupFailureMessage(lookup) {
   if (!lookup.data || typeof lookup.data !== "object") return "worker returned a malformed response body";
   const missing = ["name", "rank", "stats"].filter(field => !lookup.data[field]);
   return missing.length ? `lookup schema mismatch; missing ${missing.join(", ")}` : "";
+}
+
+function formatLookupFailureText(label, sealed, reason) {
+  return [
+    `${label}: ${sealed}`,
+    `Technique lookup failed: ${reason || "unknown error"}.`,
+    "No active jutsu was saved. Please try sealing again after fixing the combo or service issue."
+  ].join("\n");
 }
 
 function formatTechniquePreview(combo, technique) {
