@@ -3,6 +3,7 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 const GESTURE_CACHE_TTL_MS = 60 * 60 * 1000;
 const MAX_PENDING_LOOKUPS = 8;
 const FINISHER = "🙏";
+const EMOJI_SKIN_TONE_MODIFIER_PATTERN = /[\u{1F3FB}-\u{1F3FF}]/gu;
 const GESTURE_CACHE = {
   values: null,
   loadedAt: 0
@@ -30,8 +31,12 @@ async function shortId(value) {
   return Array.from(new Uint8Array(digest)).slice(0, 6).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+function normalizeEmojiModifiers(value) {
+  return String(value || "").replace(EMOJI_SKIN_TONE_MODIFIER_PATTERN, "");
+}
+
 function normalizeSealedCombo(input) {
-  const combo = (input || "").trim();
+  const combo = normalizeEmojiModifiers(input).trim();
   return combo.endsWith(FINISHER) ? combo : `${combo}${FINISHER}`;
 }
 
@@ -466,7 +471,8 @@ async function handleCastCallback(request, env, callback) {
     const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
     const technique = lookup.data || {};
     const stats = technique.stats || {};
-    const lookupSucceeded = lookup.ok && technique.name && technique.rank && technique.stats;
+    const lookupFailureReason = lookupFailureMessage(lookup);
+    const lookupSucceeded = !lookupFailureReason;
 
     let saveResult = null;
     if (lookupSucceeded) {
@@ -534,7 +540,8 @@ async function handleDrawCallback(request, env, callback) {
     const sealed = `${combo.join("")}${FINISHER}`;
     const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
     const technique = lookup.data || {};
-    const lookupSucceeded = lookup.ok && technique.name && technique.rank && technique.stats;
+    const lookupFailureReason = lookupFailureMessage(lookup);
+    const lookupSucceeded = !lookupFailureReason;
     const next = { ...session, drawHand: [], drawCombo: [], mode: undefined };
     let saveResult = null;
     if (lookupSucceeded) {
@@ -579,6 +586,14 @@ function formatArena(arena) {
   return `Arena queue: ${(arena.queue || []).length}\nActive battles: ${(arena.activeBattles || []).length}\nRecent battles: ${(arena.history || []).length}\n\nLeaderboard:\n${leaders}`;
 }
 
+function lookupFailureMessage(lookup) {
+  if (!lookup) return "worker request failed before a response was created";
+  if (!lookup.ok) return lookup.data?.error ? `worker returned HTTP ${lookup.status}: ${lookup.data.error}` : `worker returned HTTP ${lookup.status}`;
+  if (!lookup.data || typeof lookup.data !== "object") return "worker returned a malformed response body";
+  const missing = ["name", "rank", "stats"].filter(field => !lookup.data[field]);
+  return missing.length ? `lookup schema mismatch; missing ${missing.join(", ")}` : "";
+}
+
 function formatTechniquePreview(combo, technique) {
   const stats = technique.stats || {};
   const effect = technique.battleStyle || technique.spell || `${stats.class || technique.class || "Unknown"} Technique`;
@@ -596,8 +611,9 @@ function formatTechniquePreview(combo, technique) {
 async function sendLookupPreview(request, env, chatId, session, rawCombo) {
   const sealed = normalizeSealedCombo(rawCombo);
   const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
-  if (!lookup.ok || !lookup.data?.name || !lookup.data?.stats) {
-    return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Technique lookup failed: ${lookup.data?.error || "temporarily unavailable"}` }));
+  const failureReason = lookupFailureMessage(lookup);
+  if (failureReason) {
+    return telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Technique lookup failed: ${failureReason}` }));
   }
 
   await sendTypingIndicator(env, chatId);
@@ -627,8 +643,9 @@ async function handleLookupCallback(request, env, callback) {
   }
 
   const lookup = await callWorkerJson(request, `/lookup?combo=${encodeURIComponent(sealed)}`);
-  if (!lookup.ok || !lookup.data?.name) {
-    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: lookup.data?.error || "Lookup failed." });
+  const failureReason = lookupFailureMessage(lookup);
+  if (failureReason) {
+    await telegram(env, "answerCallbackQuery", { callback_query_id: callback.id, text: failureReason });
     return;
   }
 
