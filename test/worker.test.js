@@ -209,3 +209,44 @@ test("rank and leaderboard endpoints expose ranked ladder state", async () => {
   assert.equal(rank.rank.playerId, "alice");
   assert.equal(typeof rank.rank.rating, "number");
 });
+
+test("telegram config sets webhook with the newly submitted token", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ ok: true, result: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  };
+
+  const stored = new Map();
+  const env = {
+    ADMIN_TOKEN: "secret",
+    BOT_SESSIONS: {
+      async get() {
+        return null;
+      },
+      async put(key, value) {
+        stored.set(key, value);
+      }
+    }
+  };
+
+  try {
+    const response = await worker.fetch(new Request("https://example.com/telegram/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": "secret" },
+      body: JSON.stringify({ token: "123:new-token", webhookSecret: "hook-secret" })
+    }), env);
+    assert.equal(response.status, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://api.telegram.org/bot123:new-token/setWebhook");
+    assert.equal(calls[0].body.url, "https://example.com/telegram/webhook");
+    assert.equal(calls[0].body.secret_token, "hook-secret");
+    assert.ok(stored.has("telegram:config"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
