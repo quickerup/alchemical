@@ -15,7 +15,7 @@ const DEFAULT_CAST_GESTURES = [
   "🙌", "👐", "🤲", "🤜", "🤛",
   "✊", "👊", "🫸", "🫷", "🤚",
   "🖐", "✋", "🖖", "🤟", "🤞",
-  "✌", "🤌", "🫳", "🫴", "🫲",
+  "✌", "🤌", "🤘", "🫳", "🫴", "🫲",
   "🫱", "👋", "🫰", "🤙", "🤏",
   "👌", "🫵", "👉", "👈", "☝",
   "👆", "👇", "🖕", "✍", "🤳"
@@ -789,8 +789,9 @@ async function handleMessage(request, env, message) {
     return runDuel(request, env, chat.id, session, textBody);
   }
 
-  if (HAND_SIGN_PATTERN.test(textBody)) {
-    return sendLookupPreview(request, env, chat.id, session, textBody);
+  const normalizedTextCombo = normalizeSealedCombo(textBody);
+  if (HAND_SIGN_PATTERN.test(normalizedTextCombo)) {
+    return sendLookupPreview(request, env, chat.id, session, normalizedTextCombo);
   }
 
   if (command === "/start" || command === "/help" || command === STATIC_BUTTONS.help) {

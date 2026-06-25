@@ -142,6 +142,25 @@ test("analyze returns a named outcome matrix for every symbol in the combo", asy
 });
 
 
+test("lookup accepts skin-tone-modified hand signs and horns gesture", async () => {
+  const response = await worker.fetch(new Request(`https://example.com/lookup?combo=${encodeURIComponent("🤘🏻🫵🏻☝🏻🙏🏻")}`), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.technique, "🤘🫵☝🙏");
+  assert.equal(data.stats.types.includes("mystic"), true);
+});
+
+test("reported draw and seal combos resolve through lookup", async () => {
+  for (const combo of ["🤌✋👊🖕🙏", "✌🤌👈🫵🙏"]) {
+    const response = await worker.fetch(new Request(`https://example.com/lookup?combo=${encodeURIComponent(combo)}`), {});
+    assert.equal(response.status, 200, combo);
+    const data = await response.json();
+    assert.equal(data.status, "success");
+    assert.equal(data.technique, combo);
+    assert.equal(typeof data.name, "string");
+  }
+});
+
 test("telegram status requires admin auth", async () => {
   const response = await worker.fetch(new Request("https://example.com/telegram/status"), { ADMIN_TOKEN: "secret" });
   assert.equal(response.status, 401);
