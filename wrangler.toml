@@ -6,6 +6,7 @@ compatibility_date = "2025-02-04"
 # Replace these placeholder values before deploying, or override them with
 # `wrangler secret put` for sensitive production deployments.
 TELEGRAM_BOT_TOKEN = "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+TELEGRAM_WEBHOOK_SECRET = "REPLACE_WITH_TELEGRAM_WEBHOOK_SECRET"
 ADMIN_TOKEN = "REPLACE_WITH_ADMIN_TOKEN"
 
 [observability]
