@@ -2,6 +2,7 @@ import { handleTelegramConfig, handleTelegramStatus, handleTelegramWebhook } fro
 const APP_NAME = "emoji-alchemy-worker";
 const APP_VERSION = "1.2.0";
 const FINISHER = "🙏";
+const EMOJI_SKIN_TONE_MODIFIER_PATTERN = /[\u{1F3FB}-\u{1F3FF}]/gu;
 const MAX_HAND_SIGNS = 5;
 const PUBLIC_BALANCE_MAX_LENGTH = 3;
 const MEMORY_ARENA_KEY = "ARENA_STATE_V1";
@@ -1545,6 +1546,10 @@ return matched;
 }
 
 
+function normalizeEmojiModifiers(value){
+return String(value || "").replace(EMOJI_SKIN_TONE_MODIFIER_PATTERN, "");
+}
+
 function parseTechnique(input){
 
 if(!input)
@@ -1552,7 +1557,7 @@ return {error:"Missing combo",status:400};
 
 let decoded;
 try{
-decoded=decodeURIComponent(input);
+decoded=normalizeEmojiModifiers(decodeURIComponent(input));
 }catch{
 return {
 error:"Combo could not be decoded. Please URL-encode emoji combos, for example /lookup?combo=%F0%9F%91%8A%F0%9F%99%8F",
