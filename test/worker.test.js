@@ -137,3 +137,21 @@ test("analyze returns a named outcome matrix for every symbol in the combo", asy
     ["gesture", "gestureName", "outcome", "outcomeName"]
   ]);
 });
+
+
+test("telegram status requires admin auth", async () => {
+  const response = await worker.fetch(new Request("https://example.com/telegram/status"), { ADMIN_TOKEN: "secret" });
+  assert.equal(response.status, 401);
+});
+
+test("telegram status diagnoses missing token without exposing secrets", async () => {
+  const response = await worker.fetch(new Request("https://example.com/telegram/status", {
+    headers: { "X-Admin-Token": "secret" }
+  }), { ADMIN_TOKEN: "secret" });
+  assert.equal(response.status, 503);
+  const data = await response.json();
+  assert.equal(data.status, "not_configured");
+  assert.equal(data.configured.hasToken, false);
+  assert.equal(data.tokenReturned, false);
+  assert.equal(data.expectedWebhookUrl, "https://example.com/telegram/webhook");
+});
