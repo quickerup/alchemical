@@ -11,6 +11,7 @@ const GESTURE_CACHE = {
 const TELEGRAM_CONFIG_KEY = "telegram:config";
 const TELEGRAM_INTERACTION_LOG_KEY = "telegram:interaction-log";
 const TELEGRAM_INTERACTION_LOG_LIMIT = 250;
+const TELEGRAM_STATUS_INTERACTION_LOG_LIMIT = 25;
 const DEFAULT_TRANSMUTATION_DELETE_DELAY_MS = 2500;
 const DEFAULT_CAST_GESTURES = [
   "💪", "👏", "👍", "👎", "🫶",
@@ -264,6 +265,18 @@ function telegramInteractionSummary(update) {
     callbackData: callback?.data || null,
     commandOrText: message?.text ? message.text.slice(0, 200) : null
   };
+}
+
+async function getTelegramInteractionLog(env, limit = TELEGRAM_STATUS_INTERACTION_LOG_LIMIT) {
+  if (!env?.BOT_SESSIONS) return [];
+
+  try {
+    const existing = await env.BOT_SESSIONS.get(TELEGRAM_INTERACTION_LOG_KEY, "json");
+    return Array.isArray(existing) ? existing.slice(0, limit) : [];
+  } catch (error) {
+    console.warn(`Telegram interaction log read failed: ${error.message}`);
+    return [];
+  }
 }
 
 async function recordTelegramInteraction(env, update, outcome, details = {}) {
@@ -1234,6 +1247,7 @@ export async function handleTelegramStatus(request, env) {
   const tokenSource = stored.token ? "kv" : env?.TELEGRAM_BOT_TOKEN ? "env" : "missing";
   const webhookSecretSource = stored.webhookSecret ? "kv" : env?.TELEGRAM_WEBHOOK_SECRET ? "env" : "missing";
   const expectedWebhookUrl = `${new URL(request.url).origin}/telegram/webhook`;
+  const recentInteractions = await getTelegramInteractionLog(env);
 
   if (!hasToken) {
     return json({
@@ -1241,6 +1255,7 @@ export async function handleTelegramStatus(request, env) {
       status: "not_configured",
       configured: { hasToken, tokenSource, hasWebhookSecret, webhookSecretSource, hasBotSessions },
       expectedWebhookUrl,
+      recentInteractions,
       diagnosis: ["Missing Telegram bot token. Configure it with POST /telegram/config or TELEGRAM_BOT_TOKEN."],
       tokenReturned: false
     }, 503);
@@ -1280,6 +1295,7 @@ export async function handleTelegramStatus(request, env) {
       allowedUpdates: webhookResult?.allowed_updates || [],
       error: webhook.error || null
     },
+    recentInteractions,
     diagnosis: issues,
     tokenReturned: false
   }, issues.length === 0 ? 200 : 502);

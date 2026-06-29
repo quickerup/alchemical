@@ -178,6 +178,48 @@ test("telegram status diagnoses missing token without exposing secrets", async (
   assert.equal(data.expectedWebhookUrl, "https://example.com/telegram/webhook");
 });
 
+test("telegram status includes recent interaction log entries", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const method = String(url).split("/").pop();
+    const result = method === "getMe"
+      ? { id: 123, is_bot: true, username: "alchemy_bot", first_name: "Alchemy" }
+      : { url: "https://example.com/telegram/webhook", pending_update_count: 0, allowed_updates: ["message", "callback_query"] };
+    return new Response(JSON.stringify({ ok: true, result }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  };
+
+  const interactionLog = [
+    { updateId: 3, outcome: "success", ok: true },
+    { updateId: 2, outcome: "error", ok: false, error: "database unavailable" }
+  ];
+  const env = {
+    ADMIN_TOKEN: "secret",
+    BOT_SESSIONS: {
+      async get(key, type) {
+        if (key === "telegram:config") return { token: "123:test", webhookSecret: "hook-secret" };
+        if (key === "telegram:interaction-log") return type === "json" ? interactionLog : JSON.stringify(interactionLog);
+        return null;
+      }
+    }
+  };
+
+  try {
+    const response = await worker.fetch(new Request("https://example.com/telegram/status", {
+      headers: { "X-Admin-Token": "secret" }
+    }), env);
+    const data = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(data.recentInteractions, interactionLog);
+    assert.equal(data.tokenReturned, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("ranked ladder applies ELO and rank tiers", () => {
   const arena = { leaderboard: {}, player_rating: {}, player_wins: {}, player_losses: {}, player_rank: {} };
   const ranked = recordRankedDuel(arena, "alice", "bob", "alice");
