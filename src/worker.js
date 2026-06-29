@@ -341,6 +341,7 @@ commands:[
 {method:"GET",path:"/simulate?combo=👊🖖🙏&opponent=✋👐🙏",description:"Run a deterministic duel that can be replayed from the same inputs.",curl:"curl \"$BASE_URL/simulate?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F&opponent=%E2%9C%8B%F0%9F%AB%90%F0%9F%99%8F\""},
 {method:"GET",path:"/replay?combo=👊🖖🙏&opponent=✋👐🙏&matchId=MATCH-123",description:"Verify a previous deterministic match by passing the same combos and match id.",curl:"curl \"$BASE_URL/replay?combo=%F0%9F%91%8A%F0%9F%96%96%F0%9F%99%8F&opponent=%E2%9C%8B%F0%9F%AB%90%F0%9F%99%8F&matchId=MATCH-123\""},
 {method:"GET",path:"/train",description:"Get a step-by-step starter lesson for building a combo.",curl:"curl \"$BASE_URL/train\""},
+{method:"GET",path:"/dojo",description:"Get a more manageable starter dashboard with curated builds, a daily challenge, and fun quick actions.",curl:"curl \"$BASE_URL/dojo\""},
 {method:"POST",path:"/queue",description:"Submit a sealed technique into the asynchronous arena queue.",curl:"curl -X POST \"$BASE_URL/queue\" -H \"Content-Type: application/json\" -d '{\"playerId\":\"shinobi\",\"combo\":\"👊🖖🙏\",\"includeButler\":true}'"},
 {method:"GET",path:"/arena",description:"View persistent arena queue, history, leaderboard and AI Butler state.",curl:"curl \"$BASE_URL/arena\""},
 {method:"GET",path:"/leaderboard",description:"View ranked arena leaders with records and win rates.",curl:"curl \"$BASE_URL/leaderboard\""},
@@ -435,6 +436,82 @@ Example:
 };
 
 
+
+
+
+
+const DOJO_LOADOUTS = [
+{id:"spark-fist",role:"Fast attacker",combo:"👊🖖🙏",why:"A short Kinetic/Mystic opener that is easy to type, cheap to cast, and good for learning duel scoring."},
+{id:"turtle-ward",role:"Safer defender",combo:"✋🤚👐🙏",why:"Barrier-heavy signs make risk easier to manage while still teaching synergy bonuses."},
+{id:"weird-wizard",role:"Combo explorer",combo:"🖖🤟🤞🙏",why:"Mystic signs show how high special energy can swing matchups through the force triangle."},
+{id:"boss-button",role:"Ultimate hunter",combo:"🖖🤟🤞✌☝🙏",why:"A five-sign recipe that unlocks a named ultimate, with enough risk to make victories feel earned."}
+];
+
+const DAILY_CHALLENGES = [
+{id:"glass-cannon",title:"Glass Cannon",goal:"Win a duel with a Kinetic technique that has more ATK than DEF + SPC."},
+{id:"shield-song",title:"Shield Song",goal:"Build a Barrier technique with risk under 10 and queue it with includeButler=true."},
+{id:"mystic-mirror",title:"Mystic Mirror",goal:"Beat a Barrier opponent using a Mystic combo."},
+{id:"tiny-tech",title:"Tiny Tech",goal:"Find the strongest two-sign technique you can make."},
+{id:"ultimate-risk",title:"Ultimate Risk",goal:"Cast any five-sign ultimate and compare whether the power offsets the risk."}
+];
+
+function dojoDateKey(now=new Date()){
+return now.toISOString().slice(0,10);
+}
+
+function dailyChallengeForDate(dateKey){
+const seed=[...dateKey].reduce((total,char)=>total+char.charCodeAt(0),0);
+return DAILY_CHALLENGES[seed % DAILY_CHALLENGES.length];
+}
+
+async function dojoLoadoutCards(baseUrl){
+return Promise.all(DOJO_LOADOUTS.map(async loadout=>{
+const parsed=await decorateTechnique(parseTechnique(encodeURIComponent(loadout.combo)));
+return {
+...loadout,
+name:parsed.name,
+class:parsed.spell.class,
+rank:rank(parsed.spell),
+power:parsed.spell.power,
+risk:parsed.spell.risk,
+cost:parsed.spell.cost,
+links:{
+lookup:`${baseUrl}/lookup?combo=${encodeURIComponent(loadout.combo)}`,
+analyze:`${baseUrl}/analyze?combo=${encodeURIComponent(loadout.combo)}`,
+queueWithButler:`${baseUrl}/queue?combo=${encodeURIComponent(loadout.combo)}&player=dojo&butler=true`
+}
+};
+}));
+}
+
+async function dojoGuide(request){
+const url=new URL(request.url);
+const baseUrl=url.origin;
+const dateKey=dojoDateKey();
+return {
+title:"Emoji Jutsu Dojo",
+summary:"A smaller, friendlier launchpad for learning the system without memorizing every endpoint.",
+today:{date:dateKey,challenge:dailyChallengeForDate(dateKey)},
+quickStart:[
+"Pick one starter build below instead of scanning the whole gesture catalog.",
+"Open its analyze link to see exactly where the stats come from.",
+"Duel the AI Butler when you want an instant match.",
+"Try the daily challenge when you want a playful goal."
+],
+starterBuilds:await dojoLoadoutCards(baseUrl),
+funButtons:[
+{label:"Teach me",method:"GET",path:"/train",url:`${baseUrl}/train`},
+{label:"Show rules",method:"GET",path:"/rules",url:`${baseUrl}/rules`},
+{label:"Queue Spark Fist vs Butler",method:"POST",path:"/queue",url:`${baseUrl}/queue`,body:{playerId:"dojo",combo:"👊🖖🙏",includeButler:true}},
+{label:"See the leaderboard",method:"GET",path:"/leaderboard",url:`${baseUrl}/leaderboard`}
+],
+manageability:{
+maxHandSigns:MAX_HAND_SIGNS,
+advice:"Start with two or three signs, then add longer risky chains only after you understand cost, class, and force advantage.",
+forceTriangle:"Kinetic > Mystic > Barrier > Kinetic"
+}
+};
+}
 
 
 
@@ -2121,6 +2198,9 @@ return json(await runBalanceSimulator(maxLength,limit));
 
 if(path==="/train")
 return json(CODEX.train);
+
+if(path==="/dojo")
+return json(await dojoGuide(request));
 
 
 

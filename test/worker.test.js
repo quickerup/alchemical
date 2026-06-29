@@ -141,6 +141,30 @@ test("analyze returns a named outcome matrix for every symbol in the combo", asy
   ]);
 });
 
+test("help advertises the dojo starter dashboard", async () => {
+  const response = await worker.fetch(new Request("https://example.com/help"), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.ok(data.commands.some(command => command.path === "/dojo"));
+});
+
+test("dojo returns manageable starter builds and playful daily challenge", async () => {
+  const response = await worker.fetch(new Request("https://example.com/dojo"), {});
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.title, "Emoji Jutsu Dojo");
+  assert.equal(data.manageability.maxHandSigns, 5);
+  assert.ok(data.today.challenge.goal.length > 0);
+  assert.equal(data.starterBuilds.length, 4);
+  for (const build of data.starterBuilds) {
+    assert.equal(build.combo.endsWith("🙏"), true);
+    assert.equal(typeof build.name, "string");
+    assert.equal(typeof build.power, "number");
+    assert.ok(build.links.lookup.startsWith("https://example.com/lookup?combo="));
+  }
+  assert.ok(data.funButtons.some(button => button.label.includes("Butler")));
+});
+
 
 test("lookup accepts skin-tone-modified hand signs and horns gesture", async () => {
   const response = await worker.fetch(new Request(`https://example.com/lookup?combo=${encodeURIComponent("🤘🏻🫵🏻☝🏻🙏🏻")}`), {});
