@@ -276,6 +276,41 @@ test("rank and leaderboard endpoints expose ranked ladder state", async () => {
   assert.equal(typeof rank.rank.rating, "number");
 });
 
+
+test("player creation repairs missing legacy stats columns", async () => {
+  const statements = [];
+  const env = {
+    DB: {
+      prepare(sql) {
+        const normalized = sql.trim();
+        statements.push(normalized);
+        if (normalized === "PRAGMA table_info(players)") {
+          return { all: async () => ({ results: [{ name: "id" }, { name: "username" }, { name: "created_at" }] }) };
+        }
+        if (normalized.startsWith("ALTER TABLE players ADD COLUMN")) {
+          return { run: async () => ({ success: true }) };
+        }
+        if (normalized.startsWith("INSERT INTO players")) {
+          return { bind: () => ({ run: async () => ({ success: true }) }) };
+        }
+        throw new Error(`Unexpected SQL: ${normalized}`);
+      }
+    }
+  };
+
+  const response = await worker.fetch(new Request("https://example.com/player/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "legacy-ninja" })
+  }), env);
+  const data = await response.json();
+
+  assert.equal(response.status, 201);
+  assert.equal(data.username, "legacy-ninja");
+  assert.ok(statements.includes("ALTER TABLE players ADD COLUMN losses INTEGER DEFAULT 0"));
+  assert.ok(statements.includes("ALTER TABLE players ADD COLUMN wins INTEGER DEFAULT 0"));
+});
+
 test("telegram config sets webhook with the newly submitted token", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

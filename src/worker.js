@@ -1081,6 +1081,40 @@ return null;
 
 
 
+const ENSURED_PLAYER_SCHEMA_DBS=new WeakSet();
+
+
+
+async function ensurePlayerStatsSchema(env){
+
+if(!env?.DB || ENSURED_PLAYER_SCHEMA_DBS.has(env.DB))
+return;
+
+const columns=await env.DB.prepare("PRAGMA table_info(players)").all();
+const names=new Set((columns.results || []).map(column=>column.name));
+const missing=[
+["level","INTEGER DEFAULT 1"],
+["xp","INTEGER DEFAULT 0"],
+["wins","INTEGER DEFAULT 0"],
+["losses","INTEGER DEFAULT 0"],
+["draws","INTEGER DEFAULT 0"],
+["points","INTEGER DEFAULT 1000"]
+].filter(([name])=>!names.has(name));
+
+for(const [name,definition] of missing){
+try{
+await env.DB.prepare(`ALTER TABLE players ADD COLUMN ${name} ${definition}`).run();
+}catch(e){
+if(!String(e.message).includes("duplicate column")) throw e;
+}
+}
+
+ENSURED_PLAYER_SCHEMA_DBS.add(env.DB);
+
+}
+
+
+
 function createdAt(){
 
 return Date.now();
@@ -1094,6 +1128,8 @@ async function createPlayer(request,env){
 const dbError=requireDb(env);
 if(dbError)
 return json({error:dbError.error},dbError.status);
+
+await ensurePlayerStatsSchema(env);
 
 const url=new URL(request.url);
 let body={};
@@ -1143,6 +1179,8 @@ const playerId=new URL(request.url).searchParams.get("id");
 if(!playerId)
 return json({error:"Missing player id"},400);
 
+await ensurePlayerStatsSchema(env);
+
 const player=await env.DB.prepare(`
 SELECT * FROM players WHERE id = ?
 `).bind(playerId).first();
@@ -1184,6 +1222,8 @@ return json({error:"Missing signature jutsu name"},400);
 
 if(parsed.error)
 return json({error:parsed.error},parsed.status);
+
+await ensurePlayerStatsSchema(env);
 
 const player=await env.DB.prepare(`
 SELECT id FROM players WHERE id = ?
@@ -1239,6 +1279,8 @@ const playerId=new URL(request.url).searchParams.get("id");
 if(!playerId)
 return json({error:"Missing player id"},400);
 
+await ensurePlayerStatsSchema(env);
+
 const player=await env.DB.prepare(`
 SELECT * FROM players WHERE id = ?
 `).bind(playerId).first();
@@ -1282,6 +1324,8 @@ return;
 
 comboA=canonicalCombo(comboA);
 comboB=canonicalCombo(comboB);
+
+await ensurePlayerStatsSchema(env);
 
 const winnerId=replay.winner==="Player 1" ? playerA : replay.winner==="Player 2" ? playerB : "Draw";
 const timestamp=createdAt();
