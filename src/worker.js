@@ -1102,7 +1102,11 @@ const missing=[
 ].filter(([name])=>!names.has(name));
 
 for(const [name,definition] of missing){
+try{
 await env.DB.prepare(`ALTER TABLE players ADD COLUMN ${name} ${definition}`).run();
+}catch(e){
+if(!String(e.message).includes("duplicate column")) throw e;
+}
 }
 
 ENSURED_PLAYER_SCHEMA_DBS.add(env.DB);
