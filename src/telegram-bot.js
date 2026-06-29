@@ -9,6 +9,8 @@ const GESTURE_CACHE = {
   loadedAt: 0
 };
 const TELEGRAM_CONFIG_KEY = "telegram:config";
+const TELEGRAM_INTERACTION_LOG_KEY = "telegram:interaction-log";
+const TELEGRAM_INTERACTION_LOG_LIMIT = 250;
 const DEFAULT_TRANSMUTATION_DELETE_DELAY_MS = 2500;
 const DEFAULT_CAST_GESTURES = [
   "💪", "👏", "👍", "👎", "🫶",
@@ -243,6 +245,47 @@ async function kvGet(env, key, fallback = null) {
 
 async function kvPut(env, key, value) {
   await env.BOT_SESSIONS.put(key, JSON.stringify(value), { expirationTtl: SESSION_TTL_SECONDS });
+}
+
+function telegramInteractionSummary(update) {
+  const callback = update?.callback_query;
+  const message = update?.message;
+  const chat = message?.chat || callback?.message?.chat || null;
+  const actor = message?.from || callback?.from || null;
+
+  return {
+    updateId: update?.update_id ?? null,
+    interactionType: callback ? "callback_query" : message ? "message" : "unknown",
+    chatId: chat?.id ?? null,
+    chatType: chat?.type || null,
+    userId: actor?.id ?? null,
+    username: actor?.username || null,
+    messageId: message?.message_id ?? callback?.message?.message_id ?? null,
+    callbackData: callback?.data || null,
+    commandOrText: message?.text ? message.text.slice(0, 200) : null
+  };
+}
+
+async function recordTelegramInteraction(env, update, outcome, details = {}) {
+  if (!env?.BOT_SESSIONS) return;
+
+  const entry = {
+    id: crypto.randomUUID(),
+    handledAt: new Date().toISOString(),
+    ...telegramInteractionSummary(update),
+    outcome,
+    ok: outcome === "success",
+    ...details
+  };
+
+  try {
+    const existing = await env.BOT_SESSIONS.get(TELEGRAM_INTERACTION_LOG_KEY, "json");
+    const log = Array.isArray(existing) ? existing : [];
+    log.unshift(entry);
+    await env.BOT_SESSIONS.put(TELEGRAM_INTERACTION_LOG_KEY, JSON.stringify(log.slice(0, TELEGRAM_INTERACTION_LOG_LIMIT)));
+  } catch (error) {
+    console.warn(`Telegram interaction log write failed: ${error.message}`);
+  }
 }
 
 async function getSession(env, chatId) {
@@ -1261,11 +1304,21 @@ export async function handleTelegramWebhook(request, env) {
     else if (update.callback_query?.data?.startsWith("lookup:seal:")) await handleLookupCallback(request, env, update.callback_query);
     else if (update.callback_query?.data?.startsWith("nav:") || update.callback_query?.data?.startsWith("api:") || update.callback_query?.data?.startsWith("duel:use:") || update.callback_query?.data?.startsWith("queue:use:")) await handleFrontEndCallback(request, env, update.callback_query);
     else if (update.message) await handleMessage(request, env, update.message);
+    await recordTelegramInteraction(env, update, "success");
     return json({ ok: true });
   } catch (error) {
     console.error(error);
     const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
-    if (chatId) await telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Bot error: ${error.message}` }));
+    let notificationError = null;
+    if (chatId) {
+      try {
+        await telegram(env, "sendMessage", withMainMenu({ chat_id: chatId, text: `Bot error: ${error.message}` }));
+      } catch (sendError) {
+        notificationError = sendError.message;
+        console.error(sendError);
+      }
+    }
+    await recordTelegramInteraction(env, update, "error", { error: error.message, notificationError });
     return json({ ok: false, error: error.message }, 200);
   }
 }
