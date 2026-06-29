@@ -88,6 +88,12 @@ Read combat rules:
 curl "$BASE_URL/rules"
 ```
 
+Open the Dojo starter dashboard for curated builds, daily challenges, and quick next actions:
+
+```sh
+curl "$BASE_URL/dojo"
+```
+
 List gestures:
 
 ```sh
