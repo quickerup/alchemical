@@ -250,3 +250,96 @@ test("telegram config sets webhook with the newly submitted token", async () => 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("telegram webhook records successful interaction outcomes", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, result: { message_id: 99 } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" }
+  });
+
+  const stored = new Map([["telegram:config", JSON.stringify({ token: "123:test", webhookSecret: "hook-secret" })]]);
+  const env = {
+    BOT_SESSIONS: {
+      async get(key, type) {
+        const value = stored.get(key) ?? null;
+        return type === "json" && value ? JSON.parse(value) : value;
+      },
+      async put(key, value) {
+        stored.set(key, value);
+      }
+    },
+    DB: {
+      prepare() {
+        return { bind: () => ({ run: async () => ({ success: true }) }) };
+      }
+    }
+  };
+
+  try {
+    const response = await worker.fetch(new Request("https://example.com/telegram/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Telegram-Bot-Api-Secret-Token": "hook-secret" },
+      body: JSON.stringify({ update_id: 1001, message: { message_id: 7, chat: { id: 42, type: "private" }, from: { id: 9, username: "ninja" }, text: "/start" } })
+    }), env);
+
+    assert.equal(response.status, 200);
+    const log = JSON.parse(stored.get("telegram:interaction-log"));
+    assert.equal(log.length, 1);
+    assert.equal(log[0].outcome, "success");
+    assert.equal(log[0].ok, true);
+    assert.equal(log[0].updateId, 1001);
+    assert.equal(log[0].interactionType, "message");
+    assert.equal(log[0].chatId, 42);
+    assert.equal(log[0].commandOrText, "/start");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("telegram webhook records interaction errors", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, result: { message_id: 99 } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" }
+  });
+
+  const stored = new Map([["telegram:config", JSON.stringify({ token: "123:test", webhookSecret: "hook-secret" })]]);
+  const env = {
+    BOT_SESSIONS: {
+      async get(key, type) {
+        const value = stored.get(key) ?? null;
+        return type === "json" && value ? JSON.parse(value) : value;
+      },
+      async put(key, value) {
+        stored.set(key, value);
+      }
+    },
+    DB: {
+      prepare() {
+        return { bind: () => ({ run: async () => { throw new Error("database unavailable"); } }) };
+      }
+    }
+  };
+
+  try {
+    const response = await worker.fetch(new Request("https://example.com/telegram/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Telegram-Bot-Api-Secret-Token": "hook-secret" },
+      body: JSON.stringify({ update_id: 1002, message: { message_id: 8, chat: { id: 43, type: "private" }, from: { id: 10, username: "ronin" }, text: "/start" } })
+    }), env);
+    const data = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(data.ok, false);
+    const log = JSON.parse(stored.get("telegram:interaction-log"));
+    assert.equal(log.length, 1);
+    assert.equal(log[0].outcome, "error");
+    assert.equal(log[0].ok, false);
+    assert.equal(log[0].updateId, 1002);
+    assert.match(log[0].error, /Player could not be created|database unavailable/);
+    assert.equal(log[0].notificationError, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
